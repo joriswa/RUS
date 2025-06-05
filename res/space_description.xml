@@ -1,0 +1,9 @@
+<space name="or" min="0 0 0" max="2 2 2">
+    <collision>
+        <box>
+            <scale xyz="0.1 0.1 1.5" />
+            <transform xyz="0.4 0.0 0.3" rpy="0 0 0" />
+        </box>
+    </collision>
+   
+</space>
