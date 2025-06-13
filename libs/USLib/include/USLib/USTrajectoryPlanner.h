@@ -4,11 +4,11 @@
 #include <vector>
 #include <string>
 
-#include "TrajectoryLib/RobotArm.h"
+#include "TrajectoryLib/Robot/RobotArm.h"
 #include "GeometryLib/BVHTree.h"
-#include "TrajectoryLib/MotionGenerator.h"
-#include "TrajectoryLib/RobotManager.h"
-#include "TrajectoryLib/PathPlanner.h"
+#include "TrajectoryLib/Motion/MotionGenerator.h"
+#include "TrajectoryLib/Robot/RobotManager.h"
+#include "TrajectoryLib/Planning/PathPlanner.h"
 
 struct TrajectoryTask
 {

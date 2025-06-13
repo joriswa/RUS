@@ -36,8 +36,8 @@
 
 #include <QTreeWidgetItem>
 
-#include "TrajectoryLib/RobotArm.h"
-#include "TrajectoryLib/RobotManager.h"
+#include "TrajectoryLib/Robot/RobotArm.h"
+#include "TrajectoryLib/Robot/RobotManager.h"
 #include "USLib/USTrajectoryPlanner.h"
 #include "customcameracontroller.h"
 

@@ -1,9 +1,9 @@
 #include <iostream>
 
-#include "TrajectoryLib/MotionGenerator.h"
-#include "TrajectoryLib/PathPlanner.h"
-#include "TrajectoryLib/RobotArm.h"
-#include "TrajectoryLib/RobotManager.h"
+#include "TrajectoryLib/Motion/MotionGenerator.h"
+#include "TrajectoryLib/Planning/PathPlanner.h"
+#include "TrajectoryLib/Robot/RobotArm.h"
+#include "TrajectoryLib/Robot/RobotManager.h"
 
 #include <QDebug>
 

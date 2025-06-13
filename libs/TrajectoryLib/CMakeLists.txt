@@ -14,19 +14,29 @@ find_package(Eigen3 3.3 REQUIRED)
 find_package(Boost REQUIRED COMPONENTS math_c99 system)
 find_package(orocos_kdl REQUIRED)
 
-# Source files
+# Source files organized by module
 set(TRAJECTORYLIB_SOURCES
-    src/TrajectoryEvaluator.cpp
-    src/RobotArm.cpp
-    src/Robot.cpp
-    src/RobotManager.cpp
-    src/Util.cpp
-    src/MotionGenerator.cpp
-    src/PathPlanner.cpp
-    src/TrajectoryPlanner.cpp
-    src/trackballcameracontroller.cpp
-    src/utils.cpp
-    src/stomp.cpp
+    # Core module
+    src/Core/Util.cpp
+    src/Core/utils.cpp
+    
+    # Robot module  
+    src/Robot/Robot.cpp
+    src/Robot/RobotArm.cpp
+    src/Robot/RobotManager.cpp
+    
+    # Planning module
+    src/Planning/PathPlanner.cpp
+    
+    # Motion module
+    src/Motion/MotionGenerator.cpp
+    src/Motion/stomp.cpp
+    
+    # Visualization module
+    src/Visualization/trackballcameracontroller.cpp
+    
+    # Utils module
+    src/Utils/TrajectoryEvaluator.cpp
 )
 
 # Create static library

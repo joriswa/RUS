@@ -1,6 +1,6 @@
 // Debug IK solver to understand why it's failing
 #include <iostream>
-#include <TrajectoryLib/franka_ik_He.h>
+#include <TrajectoryLib/Robot/franka_ik_He.h>
 #include <Eigen/Dense>
 #include <Eigen/Geometry>
 
