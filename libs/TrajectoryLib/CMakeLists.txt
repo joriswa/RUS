@@ -24,6 +24,7 @@ set(TRAJECTORYLIB_SOURCES
     src/Robot/Robot.cpp
     src/Robot/RobotArm.cpp
     src/Robot/RobotManager.cpp
+    src/Robot/franka_ik_He.cpp
     
     # Planning module
     src/Planning/PathPlanner.cpp
