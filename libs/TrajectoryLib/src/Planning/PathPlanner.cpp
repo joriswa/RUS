@@ -928,401 +928,154 @@ PathPlanner::CheckpointPlanResult PathPlanner::planCheckpoints(
     if (originalScanPoses.empty())
         return result;
 
-    // Process the original scan poses directly (no densification)
-    std::vector<size_t> selectGoalPoseFallbacks; // Track where selectGoalPose was used
+    std::vector<size_t> repositionIndices;
     
-    if (!originalScanPoses.empty()) {
-        // Find IK solution for the first pose
-        auto [firstPoseArm, firstValid] = selectGoalPose(originalScanPoses[0]);
-        result.checkpoints.push_back(std::make_pair(firstPoseArm, firstValid));
-        
-        // Track that first pose used selectGoalPose
-        if (firstValid) {
-            selectGoalPoseFallbacks.push_back(0);
+    // First pose - always use selectGoalPose
+    auto [firstArm, firstValid] = selectGoalPose(originalScanPoses[0]);
+    result.checkpoints.push_back({firstArm, firstValid});
+    if (firstValid) repositionIndices.push_back(0);
+
+    // Setup for remaining poses
+    std::array<double, 7> currentJointAngles;
+    for (int i = 0; i < 7; i++) {
+        currentJointAngles[i] = (i < currentJoints.size()) ? currentJoints[i] : firstArm.getJointAngles()[i];
+    }
+
+    const double MAX_JOINT_DISTANCE = M_PI_2;
+    const double MAX_SINGLE_JOINT = M_PI_4;
+    std::default_random_engine gen(static_cast<unsigned>(time(0)));
+    std::uniform_real_distribution<double> dis(-1.0, 1.0);
+
+    // Process remaining poses
+    for (size_t poseIdx = 1; poseIdx < originalScanPoses.size(); ++poseIdx) {
+        const auto &pose = originalScanPoses[poseIdx];
+        Eigen::Matrix<double, 4, 4> targetMatrix = pose.matrix() * _startArm.getEndeffectorTransform().inverse().matrix();
+
+        std::array<double, 7> bestSolution;
+        bool foundSolution = false;
+        double bestCost = std::numeric_limits<double>::infinity();
+
+        // Try IK to find a solution within joint limits
+        for (int attempt = 0; attempt < 100; ++attempt) {
+            double q7Value = currentJointAngles[6] + dis(gen) * 0.2;
+            
+            try {
+                std::array<double, 7> sol = franka_IK_EE_CC(targetMatrix, q7Value, currentJointAngles);
+                
+                if (std::any_of(sol.begin(), sol.end(), [](double v) { return std::isnan(v); })) continue;
+
+                // Check joint configuration changes
+                double totalDist = 0, maxDiff = 0;
+                bool validConfig = true;
+                for (int i = 0; i < 7; i++) {
+                    double diff = std::abs(sol[i] - currentJointAngles[i]);
+                    totalDist += diff * diff;
+                    maxDiff = std::max(maxDiff, diff);
+                    if (diff > MAX_SINGLE_JOINT) validConfig = false;
+                }
+                totalDist = std::sqrt(totalDist);
+                
+                if (!validConfig || totalDist > MAX_JOINT_DISTANCE) continue;
+
+                // Check collision
+                Eigen::Matrix<double, 7, 1> solEigen;
+                for (int i = 0; i < 7; i++) solEigen[i] = sol[i];
+                
+                RobotArm tempArm = _startArm;
+                tempArm.setJointAngles(solEigen);
+                if (armHasCollision(tempArm)) continue;
+
+                if (totalDist < bestCost) {
+                    bestCost = totalDist;
+                    bestSolution = sol;
+                    foundSolution = true;
+                    if (totalDist < 0.5) break; // Good enough
+                }
+            } catch (...) {
+                continue;
+            }
         }
 
-        std::random_device rd;
-        std::mt19937 gen(rd());
-        std::uniform_real_distribution<> dis(-M_PI, M_PI);
-
-        // Use the provided currentJoints as the starting configuration
-        std::array<double, 7> currentJointAngles;
-        for (int i = 0; i < 7; i++) {
-            currentJointAngles[i] = (i < currentJoints.size()) ? currentJoints[i] : firstPoseArm.getJointAngles()[i];
-        }
-
-        // Process remaining original poses with repositioning logic
-        for (size_t poseIdx = 1; poseIdx < originalScanPoses.size(); ++poseIdx) {
-            const auto &pose = originalScanPoses[poseIdx];
-            
-            qDebug() << "Processing original pose" << poseIdx << "of" << (originalScanPoses.size() - 1);
-
-            Eigen::Matrix<double, 4, 4> targetMatrix
-                = pose.matrix() * _startArm.getEndeffectorTransform().inverse().matrix();
-
-            std::array<double, 7> bestSolution;
-            bool foundSolution = false;
-            double bestCost = std::numeric_limits<double>::infinity();
-            bool needsRepositioning = false;
-
-            // Adaptive configuration thresholds for repositioning with hysteresis
-            static int posesAfterLastRepositioning = 0;
-            static bool wasLastPoseRepositioned = false;
-            
-            // Base thresholds - more responsive for better repositioning frequency
-            double baseJointDistance = 2.5;  // Slightly more restrictive (~143°)
-            double baseSingleJointChange = 1.2;  // More restrictive (~69°)
-            
-            // Apply hysteresis: be more lenient for a few poses after repositioning
-            double hysteresisFactor = 1.0;
-            if (wasLastPoseRepositioned && posesAfterLastRepositioning < 2) {
-                hysteresisFactor = 1.25;  // 25% more lenient for 2 poses
-                posesAfterLastRepositioning++;
-            } else if (posesAfterLastRepositioning >= 2) {
-                wasLastPoseRepositioned = false;
-                posesAfterLastRepositioning = 0;
-            }
-            
-            double MAX_JOINT_DISTANCE = baseJointDistance * hysteresisFactor;
-            double MAX_SINGLE_JOINT_CHANGE = baseSingleJointChange * hysteresisFactor;
-            
-            // Check for significant directional change requiring repositioning
-            bool directionalRepositioningNeeded = false;
-            if (poseIdx > 0) {
-                const auto &prevPose = originalScanPoses[poseIdx - 1];
-                const auto &currentPose = originalScanPoses[poseIdx];
-                
-                // Extract scanning directions (Z-axis of end-effector frame)
-                Eigen::Vector3d prevDirection = prevPose.linear().col(2);  // Z-column is scanning direction
-                Eigen::Vector3d currentDirection = currentPose.linear().col(2);
-                
-                // Calculate angular difference between scanning directions
-                double dotProduct = prevDirection.dot(currentDirection);
-                dotProduct = std::clamp(dotProduct, -1.0, 1.0);  // Clamp to avoid numerical issues
-                double angularDifference = std::acos(std::abs(dotProduct));  // Use abs for bidirectional check
-                
-                // Define threshold for significant directional change (e.g., 30 degrees = ~0.52 radians)
-                const double DIRECTIONAL_CHANGE_THRESHOLD = 0.52;  // ~30 degrees
-                
-                if (angularDifference > DIRECTIONAL_CHANGE_THRESHOLD) {
-                    directionalRepositioningNeeded = true;
-                    qDebug() << "Directional change detected at pose" << poseIdx 
-                             << ": angular difference =" << (angularDifference * 180.0 / M_PI) << "degrees";
-                }
-            }
-            
-            const int maxConsistentIKAttempts = 180;  // Moderate attempts
-
-            // Try consistent Franka IK solver first with adaptive strategy
-            // Skip extensive IK search if directional repositioning is already needed
-            std::uniform_real_distribution<double> dis(-1.0, 1.0);
-            std::default_random_engine gen(static_cast<unsigned>(time(0)));
-            
-            int acceptableSolutions = 0;
-            const int minAcceptableSolutions = 5;  // Find multiple good solutions before deciding
-            
-            // If directional repositioning is needed, do a quick IK check but don't search extensively
-            int ikAttempts = directionalRepositioningNeeded ? 20 : maxConsistentIKAttempts;
-            if (directionalRepositioningNeeded) {
-                qDebug() << "Directional repositioning needed - limiting IK attempts to" << ikAttempts;
-            }
-            
-            for (int attempt = 0; attempt < ikAttempts; ++attempt) {
-                // Gradually increase search radius as we make more attempts
-                double searchRadius = 0.05 + (0.15 * attempt) / ikAttempts;
-                double q7Value = currentJointAngles[6] + dis(gen) * searchRadius;
-
-                try {
-                    std::array<double, 7> solArray = franka_IK_EE_CC(targetMatrix,
-                                                                     q7Value,
-                                                                     currentJointAngles);
-
-                    if (std::any_of(solArray.begin(), solArray.end(), [](double val) {
-                            return std::isnan(val);
-                        })) {
-                        continue;
-                    }
-
-                    // Calculate configuration differences
-                    bool configurationTooStark = false;
-                    double totalJointDistance = 0.0;
-                    double maxJointDiff = 0.0;
-                    
-                    for (int i = 0; i < 7; i++) {
-                        double jointDiff = std::abs(solArray[i] - currentJointAngles[i]);
-                        totalJointDistance += jointDiff * jointDiff;
-                        maxJointDiff = std::max(maxJointDiff, jointDiff);
-                        
-                        // Use adaptive threshold for individual joints
-                        if (jointDiff > MAX_SINGLE_JOINT_CHANGE) {
-                            configurationTooStark = true;
-                        }
-                    }
-                    
-                    totalJointDistance = std::sqrt(totalJointDistance);
-                    
-                    // Use adaptive threshold for total distance
-                    if (totalJointDistance > MAX_JOINT_DISTANCE) {
-                        configurationTooStark = true;
-                    }
-
-                    // If configuration change is too stark, count it but don't immediately reject
-                    if (configurationTooStark) {
-                        // Mark as needing repositioning earlier for better responsiveness
-                        if (attempt > maxConsistentIKAttempts * 0.4) {  // Changed from 0.6 to 0.4
-                            needsRepositioning = true;
-                        }
-                        continue; 
-                    }
-
-                    Eigen::Matrix<double, 7, 1> solEigen;
-                    for (int i = 0; i < 7; i++) {
-                        solEigen[i] = solArray[i];
-                    }
-
-                    RobotArm tempArm = _startArm;
-                    tempArm.setJointAngles(solEigen);
-
-                    if (armHasCollision(tempArm)) {
-                        continue;
-                    }
-
-                    // Use joint distance as primary cost for continuity
-                    double cost = totalJointDistance;
-
-                    if (cost < bestCost) {
-                        bestCost = cost;
-                        for (int i = 0; i < 7; i++) {
-                            bestSolution[i] = solArray[i];
-                        }
-                        foundSolution = true;
-                        needsRepositioning = false; // Found good continuous solution
-                        acceptableSolutions++;
-
-                        // Early exit conditions - more restrictive for good solutions
-                        if (totalJointDistance < 0.5 && maxJointDiff < 0.8) {
-                            qDebug() << "Found excellent continuous solution for pose" << poseIdx 
-                                     << "- early exit with distance" << totalJointDistance;
-                            break;
-                        }
-                        
-                        // If we have enough acceptable solutions, we can be more selective
-                        if (acceptableSolutions >= minAcceptableSolutions && totalJointDistance < 1.0) {
-                            qDebug() << "Found good continuous solution for pose" << poseIdx 
-                                     << "after" << acceptableSolutions << "acceptable solutions";
-                            break;
-                        }
-                    }
-                } catch (const std::exception &e) {
-                    continue;
-                }
-            }
-
-            // Handle repositioning cases: holes, stark configuration differences, or directional changes
-            if (!foundSolution || needsRepositioning || directionalRepositioningNeeded) {
-                if (directionalRepositioningNeeded) {
-                    qDebug() << "Directional change repositioning for pose" << poseIdx 
-                             << "- triggering repositioning with selectGoalPose (scanning direction changed significantly)";
-                } else if (needsRepositioning) {
-                    qDebug() << "Configuration difference too stark for pose" << poseIdx 
-                             << "- triggering repositioning with selectGoalPose (thresholds: joint=" 
-                             << MAX_JOINT_DISTANCE << ", single=" << MAX_SINGLE_JOINT_CHANGE << ")";
-                } else {
-                    qDebug() << "Hole detected (infeasible IK) for pose" << poseIdx
-                             << "- triggering repositioning with selectGoalPose";
-                }
-
-                auto [repositionArm, repositionValid] = selectGoalPose(pose);
-                if (repositionValid && !armHasCollision(repositionArm)) {
-                    // Successful repositioning - this becomes new reference configuration
-                    result.checkpoints.push_back(std::make_pair(repositionArm, true));
-                    selectGoalPoseFallbacks.push_back(poseIdx);
-                    qDebug() << "Repositioning successful for pose" << poseIdx;
-
-                    // Update tracking variables for hysteresis
-                    wasLastPoseRepositioned = true;
-                    posesAfterLastRepositioning = 0;
-
-                    // Update current configuration to repositioned state
-                    Eigen::Matrix<double, 7, 1> repositionEigen = repositionArm.getJointAngles();
-                    for (int i = 0; i < 7; i++) {
-                        currentJointAngles[i] = repositionEigen[i];
-                    }
-                } else {
-                    // Repositioning failed - create a placeholder checkpoint to maintain index correspondence
-                    // Use the current arm configuration but mark as invalid (hole in scan path)
-                    RobotArm holeArm = _startArm;
-                    Eigen::Matrix<double, 7, 1> currentEigen;
-                    for (int i = 0; i < 7; i++) {
-                        currentEigen[i] = currentJointAngles[i];
-                    }
-                    holeArm.setJointAngles(currentEigen);
-                    result.checkpoints.push_back(std::make_pair(holeArm, false));
-                    qDebug() << "Repositioning failed for pose" << poseIdx << "- marking as hole in scan path";
-                    // Note: currentJointAngles remain unchanged for holes
-                }
+        // Use repositioning if IK failed or no valid solution found
+        if (!foundSolution) {
+            auto [repoArm, repoValid] = selectGoalPose(pose);
+            if (repoValid && !armHasCollision(repoArm)) {
+                result.checkpoints.push_back({repoArm, true});
+                repositionIndices.push_back(poseIdx);
+                auto repoJoints = repoArm.getJointAngles();
+                for (int i = 0; i < 7; i++) currentJointAngles[i] = repoJoints[i];
             } else {
-                // Successful consistent IK solution
-                RobotArm nextArm = _startArm;
-                Eigen::Matrix<double, 7, 1> bestEigen;
-                for (int i = 0; i < 7; i++) {
-                    bestEigen[i] = bestSolution[i];
-                }
-                nextArm.setJointAngles(bestEigen);
-                result.checkpoints.push_back(std::make_pair(nextArm, true));
-                qDebug() << "Successful IK solution for pose" << poseIdx << "- continuous motion preserved";
-
-                // Update current configuration for next iteration
-                for (int i = 0; i < 7; i++) {
-                    currentJointAngles[i] = bestSolution[i];
-                }
-                
-                // Update tracking for hysteresis
-                if (!wasLastPoseRepositioned) {
-                    posesAfterLastRepositioning++;
-                }
+                // Invalid checkpoint
+                RobotArm invalidArm = _startArm;
+                Eigen::Matrix<double, 7, 1> currEigen;
+                for (int i = 0; i < 7; i++) currEigen[i] = currentJointAngles[i];
+                invalidArm.setJointAngles(currEigen);
+                result.checkpoints.push_back({invalidArm, false});
             }
-            
-            // Verify checkpoint correspondence 
-            qDebug() << "Pose" << poseIdx << "-> Checkpoint" << (result.checkpoints.size() - 1) 
-                     << "(valid:" << result.checkpoints.back().second << ")";
+        } else {
+            // Valid IK solution
+            RobotArm nextArm = _startArm;
+            Eigen::Matrix<double, 7, 1> bestEigen;
+            for (int i = 0; i < 7; i++) bestEigen[i] = bestSolution[i];
+            nextArm.setJointAngles(bestEigen);
+            result.checkpoints.push_back({nextArm, true});
+            for (int i = 0; i < 7; i++) currentJointAngles[i] = bestSolution[i];
         }
     }
 
-    // Perform high-level path planning: boundary detection and segmentation
-    if (!result.checkpoints.empty()) {
-        // Find boundary points: holes (invalid checkpoints) and repositioning points (selectGoalPose fallbacks)
-        std::vector<size_t> boundaryIDs;
-        
-        // Track holes (invalid checkpoints) as hard boundaries
-        for (size_t i = 0; i < result.checkpoints.size(); ++i) {
-            if (!result.checkpoints[i].second) {
-                boundaryIDs.push_back(i);
-            }
-        }
-        
-        // Add repositioning points as soft boundaries (excluding first pose which is always selectGoalPose)
-        for (size_t repositionIdx : selectGoalPoseFallbacks) {
-            if (repositionIdx > 0) { // Don't treat first pose as boundary
-                boundaryIDs.push_back(repositionIdx);
-            }
-        }
-        
-        // Sort boundary IDs
-        std::sort(boundaryIDs.begin(), boundaryIDs.end());
-        boundaryIDs.erase(std::unique(boundaryIDs.begin(), boundaryIDs.end()), boundaryIDs.end());
-        
-        // Create segments based on boundaries
-        result.validSegments.clear();
-        result.jumpPairs.clear();
-        
-        if (boundaryIDs.empty()) {
-            // No boundaries - entire sequence is one continuous segment
-            if (!result.checkpoints.empty()) {
-                // Find the last valid checkpoint
-                size_t lastValid = result.checkpoints.size() - 1;
-                while (lastValid > 0 && !result.checkpoints[lastValid].second) {
-                    lastValid--;
-                }
-                
-                // Only create segment if we have valid checkpoints
-                if (result.checkpoints[0].second && result.checkpoints[lastValid].second) {
-                    result.validSegments.push_back(std::make_pair(0, lastValid));
-                }
-            }
-        } else {
-            // Create segments between boundaries
-            size_t segmentStart = 0;
-            
-            for (size_t boundaryIdx : boundaryIDs) {
-                // Create segment before boundary (if it has valid length and valid endpoints)
-                if (boundaryIdx > segmentStart) {
-                    // Find the last valid checkpoint before the boundary
-                    size_t segmentEnd = boundaryIdx - 1;
-                    while (segmentEnd >= segmentStart && !result.checkpoints[segmentEnd].second) {
-                        if (segmentEnd == 0) break; // Prevent underflow
-                        segmentEnd--;
-                    }
-                    
-                    // Only create segment if both start and end are valid and we have a meaningful segment
-                    if (segmentEnd >= segmentStart && 
-                        result.checkpoints[segmentStart].second && 
-                        result.checkpoints[segmentEnd].second &&
-                        segmentEnd > segmentStart) { // Ensure it's not a single-point segment unless necessary
-                        result.validSegments.push_back(std::make_pair(segmentStart, segmentEnd));
-                    }
-                }
-                
-                // Handle transition after boundary
-                if (result.checkpoints[boundaryIdx].second) {
-                    // Boundary is a repositioning point (valid but needs jump)
-                    // Next segment starts at this repositioning point
-                    segmentStart = boundaryIdx;
-                } else {
-                    // Boundary is a hole (invalid checkpoint)
-                    // Find next valid checkpoint after hole
-                    size_t nextValid = boundaryIdx + 1;
-                    while (nextValid < result.checkpoints.size() && !result.checkpoints[nextValid].second) {
-                        nextValid++;
-                    }
-                    
-                    if (nextValid < result.checkpoints.size()) {
-                        // Create jump pair from last valid before hole to first valid after hole
-                        size_t lastValidBefore = (boundaryIdx > 0) ? boundaryIdx - 1 : 0;
-                        while (lastValidBefore > 0 && !result.checkpoints[lastValidBefore].second) {
-                            lastValidBefore--;
-                        }
-                        if (result.checkpoints[lastValidBefore].second) {
-                            result.jumpPairs.push_back(std::make_pair(lastValidBefore, nextValid));
-                        }
-                        segmentStart = nextValid;
-                    } else {
-                        // No more valid checkpoints
-                        segmentStart = result.checkpoints.size(); // Mark as invalid for final segment check
-                        break;
-                    }
-                }
-            }
-            
-            // Create final segment if there are valid checkpoints after last boundary
-            if (segmentStart < result.checkpoints.size()) {
-                // Find the last valid checkpoint from the end
-                size_t lastValid = result.checkpoints.size() - 1;
-                while (lastValid >= segmentStart && !result.checkpoints[lastValid].second) {
-                    if (lastValid == 0) break; // Prevent underflow
-                    lastValid--;
-                }
-                
-                // Only create segment if we found valid checkpoints and it's not already covered
-                if (lastValid >= segmentStart && 
-                    result.checkpoints[segmentStart].second && 
-                    result.checkpoints[lastValid].second &&
-                    lastValid > segmentStart) { // Ensure it's not a single-point segment unless necessary
-                    
-                    // Check if this segment would be a duplicate of an already added segment
-                    bool isDuplicate = false;
-                    for (const auto& existingSegment : result.validSegments) {
-                        if (existingSegment.first == segmentStart && existingSegment.second == lastValid) {
-                            isDuplicate = true;
-                            qDebug() << "Prevented duplicate segment: Start:" << segmentStart << "End:" << lastValid;
-                            break;
-                        }
-                    }
-                    
-                    if (!isDuplicate) {
-                        result.validSegments.push_back(std::make_pair(segmentStart, lastValid));
-                    }
-                }
-            }
-        }
+    // Build segments - find invalid checkpoints and repositioning points as boundaries
+    std::vector<size_t> boundaries;
+    for (size_t i = 0; i < result.checkpoints.size(); ++i) {
+        if (!result.checkpoints[i].second) boundaries.push_back(i); // Invalid checkpoints
+    }
+    for (size_t idx : repositionIndices) {
+        if (idx > 0) boundaries.push_back(idx); // Repositioning points (except first)
+    }
+    
+    std::sort(boundaries.begin(), boundaries.end());
+    boundaries.erase(std::unique(boundaries.begin(), boundaries.end()), boundaries.end());
 
-        // Find first valid index
-        result.firstValidIndex = 0;
-        for (size_t i = 0; i < result.checkpoints.size(); ++i) {
-            if (result.checkpoints[i].second) {
-                result.firstValidIndex = i;
-                break;
+    // Create segments between boundaries
+    if (boundaries.empty()) {
+        // Single segment
+        size_t lastValid = result.checkpoints.size() - 1;
+        while (lastValid > 0 && !result.checkpoints[lastValid].second) lastValid--;
+        if (result.checkpoints[0].second && result.checkpoints[lastValid].second) {
+            result.validSegments.push_back({0, lastValid});
+        }
+    } else {
+        size_t start = 0;
+        for (size_t boundary : boundaries) {
+            if (boundary > start) {
+                size_t end = boundary - 1;
+                while (end >= start && !result.checkpoints[end].second) {
+                    if (end == 0) break;
+                    end--;
+                }
+                if (end >= start && result.checkpoints[start].second && result.checkpoints[end].second) {
+                    result.validSegments.push_back({start, end});
+                }
             }
+            start = result.checkpoints[boundary].second ? boundary : boundary + 1;
+        }
+        
+        // Final segment
+        if (start < result.checkpoints.size()) {
+            size_t end = result.checkpoints.size() - 1;
+            while (end >= start && !result.checkpoints[end].second) {
+                if (end == 0) break;
+                end--;
+            }
+            if (end >= start && result.checkpoints[start].second && result.checkpoints[end].second) {
+                result.validSegments.push_back({start, end});
+            }
+        }
+    }
+
+    for (size_t i = 0; i < result.checkpoints.size(); ++i) {
+        if (result.checkpoints[i].second) {
+            result.firstValidIndex = i;
+            break;
         }
     }
 
