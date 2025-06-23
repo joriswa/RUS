@@ -1,0 +1,26 @@
+
+# Optimal Hauser-RRT Configuration
+# Objective Value: 1.1192
+
+hauser_method:
+  samples: 2996
+  neighbor_radius: 1.1489
+  max_iterations: 1438
+  collision_check_resolution: 0.0841
+  path_smoothing: True
+  dynamic_resampling: True
+  rrt_integration_mode: parallel
+
+rrt_configuration:
+  variant: iRRT_STAR
+  max_iterations: 7288
+  step_size: 0.1033
+  goal_bias: 0.2038
+  
+rrt_star_parameters:
+  radius: 0.6007
+  rewire_factor: 1.0261
+        
+irrt_star_parameters:
+  informed_sampling: True
+  pruning_radius: 1.5330

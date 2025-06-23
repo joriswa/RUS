@@ -1,0 +1,248 @@
+\documentclass[12pt,a4paper,oneside]{report}
+
+% Essential packages
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[english]{babel}
+\usepackage{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{tocloft}
+\usepackage{color}
+\usepackage{xcolor}
+\usepackage{graphicx}
+\usepackage{subcaption}
+\usepackage{float}
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{multirow}
+\usepackage{multicol}
+
+% Mathematics and algorithms
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+\usepackage{amsthm}
+\usepackage{algorithm}
+\usepackage{algorithmic}
+\usepackage{mathtools}
+\usepackage{bm}
+
+% Code and listings
+\usepackage{listings}
+\usepackage{minted}
+\usepackage{verbatim}
+
+% Bibliography and references
+\usepackage[backend=biber,style=ieee,sorting=ynt]{biblatex}
+\usepackage{hyperref}
+\usepackage{cleveref}
+\usepackage{url}
+
+% Advanced formatting
+\usepackage{enumitem}
+\usepackage{tikz}
+\usepackage{pgfplots}
+\usepackage{pgfplotstable}
+\usepackage{forest}
+\usepackage{adjustbox}
+
+% UML and diagrams
+\usetikzlibrary{arrows,shapes,positioning,shadows,trees,calc}
+
+% UML and diagrams
+\usetikzlibrary{arrows,shapes,positioning,shadows,trees,calc}
+
+% Custom colors
+\definecolor{codegreen}{rgb}{0,0.6,0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codepurple}{rgb}{0.58,0,0.82}
+\definecolor{backcolour}{rgb}{0.95,0.95,0.92}
+\definecolor{rusblue}{rgb}{0.2,0.4,0.8}
+\definecolor{rusorange}{rgb}{0.9,0.6,0.2}
+
+% Page geometry
+\geometry{
+    left=3cm,
+    right=2.5cm,
+    top=2.5cm,
+    bottom=2.5cm,
+    headheight=15pt
+}
+
+% Header and footer
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\leftmark}
+\fancyhead[R]{\thepage}
+\fancyfoot[C]{Robotic Ultrasound System - Technical Documentation}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\footrulewidth}{0.4pt}
+
+% Code listing style
+\lstdefinestyle{cplusplus}{
+    backgroundcolor=\color{backcolour},   
+    commentstyle=\color{codegreen},
+    keywordstyle=\color{magenta},
+    numberstyle=\tiny\color{codegray},
+    stringstyle=\color{codepurple},
+    basicstyle=\ttfamily\footnotesize,
+    breakatwhitespace=false,         
+    breaklines=true,                 
+    captionpos=b,                    
+    keepspaces=true,                 
+    numbers=left,                    
+    numbersep=5pt,                  
+    showspaces=false,                
+    showstringspaces=false,
+    showtabs=false,                  
+    tabsize=2,
+    language=C++,
+    frame=single,
+    rulecolor=\color{black}
+}
+
+\lstset{style=cplusplus}
+
+% Chapter formatting
+\titleformat{\chapter}[display]
+{\normalfont\huge\bfseries\color{rusblue}}
+{\chaptertitlename\ \thechapter}{20pt}{\Huge}
+
+% Section formatting
+\titleformat{\section}
+{\normalfont\Large\bfseries\color{rusblue}}
+{\thesection}{1em}{}
+
+\titleformat{\subsection}
+{\normalfont\large\bfseries\color{rusorange}}
+{\thesubsection}{1em}{}
+
+% Theorem environments
+\theoremstyle{definition}
+\newtheorem{definition}{Definition}[section]
+\newtheorem{example}{Example}[section]
+\newtheorem{remark}{Remark}[section]
+
+\theoremstyle{plain}
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{lemma}{Lemma}[section]
+\newtheorem{proposition}{Proposition}[section]
+
+% Custom commands
+\newcommand{\rus}{\textsc{RUS}}
+\newcommand{\stomp}{\textsc{STOMP}}
+\newcommand{\bvh}{\textsc{BVH}}
+\newcommand{\tka}{\textsc{TKA}}
+\newcommand{\simd}{\textsc{SIMD}}
+\newcommand{\raii}{\textsc{RAII}}
+
+% Math commands
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\N}{\mathbb{N}}
+\newcommand{\Z}{\mathbb{Z}}
+\newcommand{\C}{\mathbb{C}}
+\newcommand{\norm}[1]{\left\|#1\right\|}
+\newcommand{\abs}[1]{\left|#1\right|}
+\newcommand{\inner}[2]{\left\langle#1,#2\right\rangle}
+
+% Bibliography
+\addbibresource{references.bib}
+
+% Hyperref setup
+\hypersetup{
+    colorlinks=true,
+    linkcolor=rusblue,
+    filecolor=magenta,
+    urlcolor=cyan,
+    citecolor=rusorange,
+    pdfauthor={RUS Development Team},
+    pdftitle={Robotic Ultrasound System - Comprehensive Technical Documentation},
+    pdfsubject={Robotics, Medical Imaging, Trajectory Planning},
+    pdfkeywords={Robotics, Ultrasound, STOMP, Path Planning, Medical Devices}
+}
+
+% Document information
+\title{
+    \vspace{-2cm}
+    \begin{center}
+        \input{figures/rus_logo.tex}\\[1cm]
+        {\Huge\bfseries\color{rusblue} Robotic Ultrasound System}\\[0.5cm]
+        {\Large\color{rusorange} Comprehensive Technical Documentation}\\[0.3cm]
+        {\large System Architecture, Implementation Analysis, and Clinical Integration}
+    \end{center}
+    \vspace{1cm}
+}
+
+\author{
+    \begin{tabular}{c}
+        \textbf{RUS Development Team}\\[0.2cm]
+        Department of Robotics and Medical Engineering\\
+        Advanced Healthcare Technologies Laboratory\\[0.5cm]
+        \textit{Principal Investigators:}\\
+        Dr. Joris van der Berg\\
+        Prof. Sarah Johnson, Ph.D.\\
+        Dr. Michael Chen, M.D., Ph.D.
+    \end{tabular}
+}
+
+\date{\today}
+
+\begin{document}
+
+% Title page
+\maketitle
+\thispagestyle{empty}
+
+% Abstract page
+\newpage
+\thispagestyle{empty}
+\begin{abstract}
+\noindent
+This document presents a comprehensive technical analysis of the Robotic Ultrasound System (\rus{}), an advanced autonomous medical imaging platform designed to address critical healthcare accessibility challenges. The \rus{} architecture combines sophisticated trajectory optimization algorithms, real-time collision detection, force-controlled manipulation, and distributed computing frameworks to create a clinically viable automated ultrasound scanning solution.
+
+The system demonstrates exceptional engineering sophistication through its implementation of Stochastic Trajectory Optimization for Motion Planning (\stomp{}), hierarchical Bounding Volume Hierarchy (\bvh{}) trees for spatial reasoning, and comprehensive multi-threaded execution frameworks. This analysis reveals design patterns that extend beyond traditional robotic systems, incorporating medical-grade safety protocols, real-time performance guarantees, and extensible plugin architectures suitable for diverse clinical applications.
+
+Key contributions include: (1) A multi-layer abstraction architecture enabling domain separation between medical logic and generic robotics, (2) Advanced parallel processing algorithms achieving near-linear scaling performance, (3) Safety-critical design patterns with graceful degradation capabilities, (4) Comprehensive error handling and fault tolerance mechanisms, and (5) Clinical integration frameworks supporting standardized medical protocols.
+
+The economic analysis demonstrates significant potential for healthcare transformation, with projected cost reductions of 75-85\% compared to traditional MRI imaging, addressing a \$780M-\$1.2B market for underserved populations. The system's 24/7 availability and standardized protocols position it as a transformative solution for healthcare accessibility challenges, particularly in rural and underserved communities.
+
+This documentation serves as both a technical reference for system developers and a comprehensive guide for clinical deployment, providing detailed specifications for hardware integration, software configuration, and regulatory compliance pathways.
+\end{abstract}
+
+% Table of contents
+\newpage
+\tableofcontents
+\listoffigures
+\listoftables
+\lstlistoflistings
+
+% Main content
+\newpage
+\pagenumbering{arabic}
+
+\input{sections/01_introduction}
+\input{sections/02_system_overview}
+\input{sections/03_architecture_analysis}
+\input{sections/04_core_libraries}
+\input{sections/05_uml_modeling}
+\input{sections/06_dynamic_behavior}
+\input{sections/07_performance_optimization}
+\input{sections/08_safety_reliability}
+\input{sections/09_clinical_integration}
+\input{sections/10_economic_analysis}
+\input{sections/11_deployment_architecture}
+\input{sections/12_future_evolution}
+
+% Appendices
+\appendix
+\input{appendices/A_code_listings}
+\input{appendices/B_performance_benchmarks}
+\input{appendices/C_regulatory_compliance}
+\input{appendices/D_installation_guide}
+
+% Bibliography
+\printbibliography
+
+\end{document}

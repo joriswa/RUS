@@ -1,0 +1,392 @@
+{
+  "detection_results": [
+    {
+      "contact_detected": true,
+      "measured_force": 2.0759680898400488,
+      "contact_position": [
+        -0.009688485793387868,
+        0.056267357424255274,
+        0.0019127651667317886
+      ],
+      "approach_trajectory": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          -0.009688485793387868,
+          0.056267357424255274,
+          0.0019127651667317886
+        ]
+      ],
+      "measurement_uncertainty": 0.002,
+      "landmark_name": "patella_apex",
+      "landmark_info": {
+        "description": "Apex of the patella (kneecap)",
+        "approximate_position": [
+          0.0,
+          0.05,
+          0.0
+        ],
+        "accessibility": "high",
+        "reliability": "high",
+        "force_approach_direction": [
+          0,
+          1,
+          0
+        ]
+      },
+      "model_position": [
+        0.0,
+        0.05,
+        0.0
+      ],
+      "real_position": [
+        -0.007843594135868994,
+        0.056901313991829544,
+        0.0007818190621685542
+      ]
+    },
+    {
+      "contact_detected": true,
+      "measured_force": 2.161585784253562,
+      "contact_position": [
+        -0.022417544681657207,
+        0.023844134738316355,
+        -0.008268991278887377
+      ],
+      "approach_trajectory": [
+        [
+          0.020000000000000004,
+          0.02,
+          0.0
+        ],
+        [
+          -0.022417544681657207,
+          0.023844134738316355,
+          -0.008268991278887377
+        ]
+      ],
+      "measurement_uncertainty": 0.002,
+      "landmark_name": "medial_femoral_condyle",
+      "landmark_info": {
+        "description": "Medial condyle of femur",
+        "approximate_position": [
+          -0.03,
+          0.02,
+          0.0
+        ],
+        "accessibility": "medium",
+        "reliability": "high",
+        "force_approach_direction": [
+          -1,
+          0,
+          0
+        ]
+      },
+      "model_position": [
+        -0.03,
+        0.02,
+        0.0
+      ],
+      "real_position": [
+        -0.02400598453844436,
+        0.020972879729555114,
+        -0.005417146195438647
+      ]
+    },
+    {
+      "contact_detected": false,
+      "measured_force": -0.1797778850747016,
+      "contact_position": [
+        0.03,
+        0.02,
+        0.0
+      ],
+      "approach_trajectory": [
+        [
+          -0.020000000000000004,
+          0.02,
+          0.0
+        ],
+        [
+          0.03,
+          0.02,
+          0.0
+        ]
+      ],
+      "measurement_uncertainty": 0.01,
+      "landmark_name": "lateral_femoral_condyle",
+      "landmark_info": {
+        "description": "Lateral condyle of femur",
+        "approximate_position": [
+          0.03,
+          0.02,
+          0.0
+        ],
+        "accessibility": "medium",
+        "reliability": "high",
+        "force_approach_direction": [
+          1,
+          0,
+          0
+        ]
+      },
+      "model_position": [
+        0.03,
+        0.02,
+        0.0
+      ],
+      "real_position": [
+        0.02483487540749995,
+        0.019273621348330067,
+        0.005926887779467704
+      ]
+    },
+    {
+      "contact_detected": true,
+      "measured_force": 1.9416012408316763,
+      "contact_position": [
+        0.003249296474311572,
+        -0.03614530541909298,
+        0.024395553103698467
+      ],
+      "approach_trajectory": [
+        [
+          0.0,
+          0.010000000000000002,
+          0.02
+        ],
+        [
+          0.003249296474311572,
+          -0.03614530541909298,
+          0.024395553103698467
+        ]
+      ],
+      "measurement_uncertainty": 0.002,
+      "landmark_name": "tibial_tuberosity",
+      "landmark_info": {
+        "description": "Tibial tuberosity",
+        "approximate_position": [
+          0.0,
+          -0.04,
+          0.02
+        ],
+        "accessibility": "high",
+        "reliability": "medium",
+        "force_approach_direction": [
+          0,
+          -1,
+          0
+        ]
+      },
+      "model_position": [
+        0.0,
+        -0.04,
+        0.02
+      ],
+      "real_position": [
+        0.002033633670929305,
+        -0.03431138993681385,
+        0.028554707079150306
+      ]
+    },
+    {
+      "contact_detected": true,
+      "measured_force": 2.0013207701327764,
+      "contact_position": [
+        -0.0209404446384374,
+        -0.021879160534502926,
+        0.0015711063153303986
+      ],
+      "approach_trajectory": [
+        [
+          0.010355339059327374,
+          0.015355339059327375,
+          0.0
+        ],
+        [
+          -0.0209404446384374,
+          -0.021879160534502926,
+          0.0015711063153303986
+        ]
+      ],
+      "measurement_uncertainty": 0.002,
+      "landmark_name": "medial_tibial_plateau",
+      "landmark_info": {
+        "description": "Medial edge of tibial plateau",
+        "approximate_position": [
+          -0.025,
+          -0.02,
+          0.0
+        ],
+        "accessibility": "medium",
+        "reliability": "medium",
+        "force_approach_direction": [
+          -0.7071067811865475,
+          -0.7071067811865475,
+          0.0
+        ]
+      },
+      "model_position": [
+        -0.025,
+        -0.02,
+        0.0
+      ],
+      "real_position": [
+        -0.024130559670027914,
+        -0.022008498911259465,
+        0.0006417164297469791
+      ]
+    },
+    {
+      "contact_detected": false,
+      "measured_force": -0.05292815553843177,
+      "contact_position": [
+        0.025,
+        -0.02,
+        0.0
+      ],
+      "approach_trajectory": [
+        [
+          -0.010355339059327374,
+          0.015355339059327375,
+          0.0
+        ],
+        [
+          0.025,
+          -0.02,
+          0.0
+        ]
+      ],
+      "measurement_uncertainty": 0.01,
+      "landmark_name": "lateral_tibial_plateau",
+      "landmark_info": {
+        "description": "Lateral edge of tibial plateau",
+        "approximate_position": [
+          0.025,
+          -0.02,
+          0.0
+        ],
+        "accessibility": "medium",
+        "reliability": "medium",
+        "force_approach_direction": [
+          0.7071067811865475,
+          -0.7071067811865475,
+          0.0
+        ]
+      },
+      "model_position": [
+        0.025,
+        -0.02,
+        0.0
+      ],
+      "real_position": [
+        0.024821638177633023,
+        -0.012222689925525996,
+        0.002856227517841577
+      ]
+    }
+  ],
+  "registration_result": {
+    "transformation_matrix": [
+      [
+        0.927251452527651,
+        -0.1623705439775795,
+        -0.3374026529738405,
+        0.002393352437275627
+      ],
+      [
+        0.17185277650113542,
+        0.9851210177733911,
+        -0.001789846353316508,
+        0.005430878916467647
+      ],
+      [
+        0.33267306322305595,
+        -0.056323945081489524,
+        0.9413587234504419,
+        0.004910879191486853
+      ],
+      [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    ],
+    "rotation": [
+      [
+        0.927251452527651,
+        -0.1623705439775795,
+        -0.3374026529738405
+      ],
+      [
+        0.17185277650113542,
+        0.9851210177733911,
+        -0.001789846353316508
+      ],
+      [
+        0.33267306322305595,
+        -0.056323945081489524,
+        0.9413587234504419
+      ]
+    ],
+    "translation": [
+      0.002393352437275627,
+      0.005430878916467647,
+      0.004910879191486853
+    ],
+    "registration_error": 0.005227227318863866,
+    "uncertainty_metrics": {
+      "measurement_uncertainty": 0.002,
+      "geometric_uncertainty": 0.019674331775698252,
+      "residual_std": 0.0018021555079488505,
+      "max_residual": 0.007639409930511896,
+      "total_uncertainty": 0.019857670943367964,
+      "confidence_score": 0
+    },
+    "num_landmarks": 4,
+    "landmark_names": [
+      "patella_apex",
+      "medial_femoral_condyle",
+      "tibial_tuberosity",
+      "medial_tibial_plateau"
+    ]
+  },
+  "integration_result": {
+    "registration_transform": [
+      [
+        0.927251452527651,
+        -0.1623705439775795,
+        -0.3374026529738405,
+        0.002393352437275627
+      ],
+      [
+        0.17185277650113542,
+        0.9851210177733911,
+        -0.001789846353316508,
+        0.005430878916467647
+      ],
+      [
+        0.33267306322305595,
+        -0.056323945081489524,
+        0.9413587234504419,
+        0.004910879191486853
+      ],
+      [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    ],
+    "stomp_parameter_adjustments": {
+      "collision_cost_weight": 74.64417735841991,
+      "smoothness_cost_weight": 9.964417735841991,
+      "safety_margin_expansion": 0.03971534188673593,
+      "convergence_threshold": 0.0004971534188673593,
+      "uncertainty_penalty_weight": 0.19857670943367964
+    },
+    "uncertainty_objective_function": 

@@ -221,14 +221,20 @@ MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::MainWindow)
 {
+    qDebug() << "Starting PathPlanner application initialization";
+    
     ui->setupUi(this);
     _robotArm = new RobotArm("/Users/joris/Uni/MA/robot_definition/panda_US.urdf");
+    qDebug() << "Robot arm initialized";
     qDebug() << "starting";
 
+    qDebug() << "Setting up 3D scene";
     setup3DScene();
     createFloor();
+    qDebug() << "3D scene setup completed";
 
     _robotArm->createEntities(_rootEntity);
+    qDebug() << "Robot entities created in 3D scene";
 
     Eigen::Vector3d pos = Eigen::Vector3d(0.475, 0.4, 0.5);
     Eigen::Matrix3d Rx, Ry, Rz, axes;
@@ -239,6 +245,7 @@ MainWindow::MainWindow(QWidget *parent)
 
     _usPlanner = new UltrasoundScanTrajectoryPlanner(
         "/Users/joris/Uni/MA/robot_definition/panda_US.urdf");
+    qDebug() << "Ultrasound trajectory planner initialized";
 
     Eigen::VectorXd angles(7);
     angles << 0.374894, -0.043533, 0.087470, -1.533429, 0.02237, 1.050135, 0.075773;
@@ -250,6 +257,7 @@ MainWindow::MainWindow(QWidget *parent)
 
     _robotArm->setJointAngles(angles);
     _robotArm->updateEntities();
+    qDebug() << "Robot arm positioned to initial configuration";
 
     ui->pushButton_clearEnviornment->setEnabled(false);
 
@@ -258,6 +266,7 @@ MainWindow::MainWindow(QWidget *parent)
 
     _robotArm->updateEntities();
 
+    qDebug() << "Connecting UI signals and slots";
     connect(ui->pushButton_runPathfinding, &QPushButton::clicked, this, &MainWindow::findPath);
 
     connect(ui->checkBox_collisionBoxes,
@@ -304,6 +313,8 @@ MainWindow::MainWindow(QWidget *parent)
     // _robotArm->updateEntities();
 
     setPredefinedCamera();
+    
+    qDebug() << "PathPlanner application initialization completed successfully";
 }
 
 MainWindow::~MainWindow()
@@ -541,15 +552,26 @@ void MainWindow::addArticulationControls(QTreeWidgetItem *parentItem, std::share
 
 void MainWindow::findPath()
 {
+    qDebug() << "Starting path planning";
+    
+    qDebug() << "Starting path planning with current robot configuration";
     _usPlanner->setCurrentJoints(_robotArm->getJointAngles());
+    
+    qDebug() << "Running trajectory planning";
     _usPlanner->planTrajectories();
+    qDebug() << "Trajectory planning completed";
 
     ui->listWidget_trajectories->clear();
 
     const auto &trajectories = _usPlanner->getTrajectories();
+    qDebug() << "Generated" << trajectories.size() << "trajectories";
+    
     for (size_t i = 0; i < trajectories.size(); ++i) {
         const auto &trajectory = trajectories[i].first;
         bool isContactForce = trajectories[i].second;
+
+        qDebug() << "Trajectory" << (i + 1) << ":" << trajectory.size() 
+                  << "points, contact force:" << (isContactForce ? "yes" : "no");
 
         // Create the item text with a visual indicator for contact force trajectories
         QString itemText = QString("Trajectory %1 (%2 points)%3")
@@ -566,6 +588,8 @@ void MainWindow::findPath()
 
         ui->listWidget_trajectories->addItem(item);
     }
+    
+    qDebug() << "Path planning completed successfully";
 }
 
 QSlider* MainWindow::createSlider(int min, int max, int value) {
@@ -1265,3 +1289,4 @@ void MainWindow::onIterationSpinBoxValueChanged(int iteration)
             .arg(currentTheta.rows())
             .arg(pathPoints.size()));
 }
+

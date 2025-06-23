@@ -1,0 +1,9 @@
+2025-06-18 20:24:43,598 - __main__ - INFO - 🎯 Running STOMP-focused optimization
+2025-06-18 20:24:43,893 - core.optimization - INFO - Created new study: stomp_focused_optimization_stomp
+2025-06-18 20:24:43,894 - core.optimization - INFO - Starting optimization for stomp with 400 trials...
+2025-06-18 20:25:13,006 - core.optimization - INFO - Saved results for stomp to trajectory_optimization/data/results/stomp
+2025-06-18 20:25:13,009 - core.optimization - INFO - Optimization completed for stomp. Best value: 0.5445
+2025-06-18 20:25:13,009 - __main__ - INFO - STOMP optimization complete!
+2025-06-18 20:25:13,011 - __main__ - INFO - Best objective value: 0.5445
+2025-06-18 20:25:13,013 - __main__ - INFO - Best parameters: {'stomp_max_iterations': 70, 'stomp_num_noisy_trajectories': 10, 'stomp_num_best_samples': 13, 'stomp_learning_rate': 0.031730693138185544, 'stomp_temperature': 43.60889870960598, 'stomp_dt': 0.1449303599727216, 'stomp_noise_stddev': 0.20215278631604358, 'stomp_control_cost_weight': 8.836273300427987, 'stomp_smoothness_cost_weight': 1.0024247421993808, 'stomp_collision_cost_weight': 27.95725993656989, 'stomp_use_finite_differences': True, 'stomp_trajectory_length': 89, 'stomp_convergence_threshold': 0.0006105091113061596}
+2025-06-18 20:25:17,578 - core.optimization - INFO - Generated optimization report: trajectory_optimization/data/reports/optimization_report_20250618_202513.md

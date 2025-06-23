@@ -30,6 +30,11 @@ add_executable(ClearanceCalculator
     clearance_calculator.cpp
 )
 
+# Add executable for simple configurable comparison (for Optuna testing)
+add_executable(SimpleConfigurableComparison
+    simple_configurable_comparison.cpp
+)
+
 # Link libraries for main comparison
 target_link_libraries(STOMPHauserComparison
     GeometryLib
@@ -50,6 +55,11 @@ target_link_libraries(ClearanceCalculator
     pthread
 )
 
+# SimpleConfigurableComparison doesn't need heavy libraries
+target_link_libraries(SimpleConfigurableComparison
+    pthread
+)
+
 # Set output directory
 set_target_properties(STOMPHauserComparison PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/apps/ComparisonSTOMPHauser
@@ -59,10 +69,15 @@ set_target_properties(ClearanceCalculator PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/apps/ComparisonSTOMPHauser
 )
 
+set_target_properties(SimpleConfigurableComparison PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/apps/ComparisonSTOMPHauser
+)
+
 # Compiler-specific options
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     target_compile_options(STOMPHauserComparison PRIVATE -Wall -Wextra -O3)
     target_compile_options(ClearanceCalculator PRIVATE -Wall -Wextra -O3)
+    target_compile_options(SimpleConfigurableComparison PRIVATE -Wall -Wextra -O3)
 endif()
 
 # Add definitions for Qt

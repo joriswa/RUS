@@ -1,5 +1,6 @@
 #include "TrajectoryLib/Motion/MotionGenerator.h"
 #include <future>
+#include <cmath> // Required for std::exp
 
 Eigen::VectorXd computeAccelerations(const Eigen::VectorXd &positions, double dt)
 {
@@ -228,7 +229,7 @@ void MotionGenerator::generateInitialTrajectory()
  * @return This function doesn't return a value, but it populates the internal
  *         _path member with the optimized trajectory points.
  */
-void MotionGenerator::performHauser(unsigned int maxIterations, const std::string &out)
+void MotionGenerator::performHauser(unsigned int maxIterations, const std::string &out, unsigned int outputFrequency)
 {
     _path.clear();
     ParabolicRamp::DynamicPath traj;
@@ -656,6 +657,50 @@ bool MotionGenerator::performSTOMP(const StompConfig &config,
         qDebug() << "Optimized duration:" << optimizedDuration << "s";
         qDebug() << "Time saved:" << timeSaved << "s (" << (timeSaved / originalDuration) * 100.0
                  << "% reduction)";
+
+        // Apply quintic polynomial resampling if outputFrequency is specified
+        if (config.outputFrequency > 0) {
+            // Convert trajectory points to matrix format for resampling
+            int numPoints = _path.size();
+            Eigen::MatrixXd trajectoryMatrix(numPoints, config.numJoints);
+            Eigen::VectorXd timesVector(numPoints);
+            
+            for (int i = 0; i < numPoints; ++i) {
+                timesVector(i) = _path[i].time;
+                for (int j = 0; j < config.numJoints; ++j) {
+                    trajectoryMatrix(i, j) = _path[i].position[j];
+                }
+            }
+            
+            // Apply quintic polynomial resampling with actual time vector
+            Eigen::MatrixXd resampledMatrix = applyQuinticPolynomialResamplingWithTimes(trajectoryMatrix, timesVector, config.outputFrequency);
+            
+            // Convert back to trajectory points
+            _path.clear();
+            double outputDt = 1.0 / config.outputFrequency;
+            double totalTime = timesVector(numPoints - 1);
+            int outputPoints = static_cast<int>(std::ceil(totalTime * config.outputFrequency)) + 1;
+            
+            for (int i = 0; i < std::min(static_cast<int>(resampledMatrix.rows()), outputPoints); ++i) {
+                TrajectoryPoint point;
+                point.time = i * outputDt;
+                point.position.clear();
+                point.velocity.clear();
+                point.acceleration.clear();
+                
+                for (int j = 0; j < config.numJoints; ++j) {
+                    point.position.push_back(resampledMatrix(i, j));
+                    point.velocity.push_back(0.0);  // Will be computed properly if needed
+                    point.acceleration.push_back(0.0);  // Will be computed properly if needed
+                }
+                _path.push_back(point);
+            }
+            
+            qDebug() << "Applied quintic polynomial resampling:";
+            qDebug() << "Output frequency:" << config.outputFrequency << "Hz";
+            qDebug() << "Resampled trajectory points:" << _path.size();
+            qDebug() << "Final duration:" << _path.back().time << "s";
+        }
     }
     return success;
 }
@@ -667,7 +712,6 @@ Eigen::MatrixXd MotionGenerator::smoothTrajectoryUpdate(const Eigen::MatrixXd &d
 
     return smoothed;
 }
-#include <cmath> // Required for std::exp
 
 double MotionGenerator::computeObstacleCost(const RobotArm &curArm,
                                             const RobotArm &prevArm,
@@ -1661,11 +1705,6 @@ double ApproachDepartureCostCalculator::computeCost(const Eigen::MatrixXd &traje
         cost += _weight * 0.5 * orientationDeviation * orientationDeviation;
     }
 
-    // Debug output
-    qDebug() << "departPhaseStart:" << departPhaseStart;
-    qDebug() << "N:" << N;
-    qDebug() << "departure range:" << (departPhaseStart + 1) << "to" << (N - 1);
-
     // Departure phase - Fixed logic
     Eigen::Vector3d departDir = endZAxis;
     for (int i = departPhaseStart + 1; i < N; ++i) {
@@ -1874,6 +1913,8 @@ bool MotionGenerator::performSTOMPWithCheckpoints(
         return false;
     }
 
+    _path = initialTrajectory;
+
     // // Extract positions from trajectory points
     // int N = initialTrajectory.size();
     // Eigen::MatrixXd theta = Eigen::MatrixXd::Zero(N, config.numJoints);
@@ -1914,29 +1955,22 @@ bool MotionGenerator::performSTOMPWithCheckpoints(
     // double bestCollisionFreeCost = std::numeric_limits<double>::max();
 
     // for (int iteration = 0; iteration < config.maxIterations; iteration++) {
+    //     qDebug() << "STOMP iteration" << iteration << "of" << config.maxIterations;
+
     //     std::vector<Eigen::MatrixXd> noisyTrajectories(config.numNoisyTrajectories
     //                                                    + config.numBestSamples);
 
-    //     // Use promise/future for synchronization
-    //     std::vector<std::promise<void>> noisePromises(config.numNoisyTrajectories);
-    //     std::vector<std::future<void>> noiseFutures;
+    //     // Generate noisy trajectories in parallel
+    //     std::vector<std::promise<void>> promises(config.numNoisyTrajectories);
+    //     std::vector<std::future<void>> futures;
 
-    //     for (auto &promise : noisePromises) {
-    //         noiseFutures.push_back(promise.get_future());
+    //     for (auto &promise : promises) {
+    //         futures.push_back(promise.get_future());
     //     }
 
-    //     // Generate noisy trajectories in parallel using the thread pool
     //     for (int k = 0; k < config.numNoisyTrajectories; ++k) {
     //         boost::asio::post(*pool,
-    //                           [this,
-    //                            k,
-    //                            &noisyTrajectories,
-    //                            &theta,
-    //                            &config,
-    //                            &limits,
-    //                            &checkpointIndices,
-    //                            &checkpoints,
-    //                            &noisePromises]() {
+    //                           [this, k, &noisyTrajectories, &theta, &config, &limits, &promises]() {
     //                               try {
     //                                   noisyTrajectories[k]
     //                                       = generateNoisyTrajectory(theta,
@@ -1948,15 +1982,15 @@ bool MotionGenerator::performSTOMPWithCheckpoints(
     //                                       int idx = checkpointIndices[i];
     //                                       noisyTrajectories[k].row(idx) = checkpoints[i];
     //                                   }
-    //                                   noisePromises[k].set_value();
+    //                                   promises[k].set_value();
     //                               } catch (...) {
-    //                                   noisePromises[k].set_exception(std::current_exception());
+    //                                   promises[k].set_exception(std::current_exception());
     //                               }
     //                           });
     //     }
 
     //     // Wait for all trajectory generation tasks
-    //     for (auto &future : noiseFutures) {
+    //     for (auto &future : futures) {
     //         future.wait();
     //     }
 
@@ -1970,7 +2004,6 @@ bool MotionGenerator::performSTOMPWithCheckpoints(
     //     int totalSamples = config.numNoisyTrajectories
     //                        + std::min(config.numBestSamples, static_cast<int>(bestSamples.size()));
     //     Eigen::VectorXd S(totalSamples);
-    //     Eigen::VectorXd P(totalSamples);
     //     std::vector<double> totalCosts(totalSamples);
 
     //     // Reset promises/futures for cost calculation
@@ -1978,26 +2011,26 @@ bool MotionGenerator::performSTOMPWithCheckpoints(
     //     std::vector<std::future<void>> costFutures;
 
     //     for (auto &promise : costPromises) {
-    //         costFutures.push_back(promise.get_future());
+    //         futures.push_back(promise.get_future());
     //     }
 
     //     for (int k = 0; k < totalSamples; k++) {
     //         boost::asio::post(*pool,
-    //                           [this, k, &noisyTrajectories, &totalCosts, &S, dt, &costPromises]() {
+    //                           [this, k, &noisyTrajectories, &totalCosts, &S, dt, &promises]() {
     //                               try {
     //                                   double trajectoryCost
     //                                       = _costCalculator->computeCost(noisyTrajectories[k], dt);
     //                                   totalCosts[k] = trajectoryCost;
     //                                   S(k) = trajectoryCost;
-    //                                   costPromises[k].set_value();
+    //                                   promises[k].set_value();
     //                               } catch (...) {
-    //                                   costPromises[k].set_exception(std::current_exception());
+    //                                   promises[k].set_exception(std::current_exception());
     //                               }
     //                           });
     //     }
 
     //     // Wait for all cost calculation tasks
-    //     for (auto &future : costFutures) {
+    //     for (auto &future : futures) {
     //         future.wait();
     //     }
 
@@ -2024,12 +2057,6 @@ bool MotionGenerator::performSTOMPWithCheckpoints(
 
     //     Eigen::MatrixXd deltaS = smoothTrajectoryUpdate(deltaTheta);
     //     theta += config.learningRate * deltaS;
-
-    //     // // Re-enforce checkpoints after update
-    //     // for (size_t i = 0; i < checkpointIndices.size(); i++) {
-    //     //     int idx = checkpointIndices[i];
-    //     //     theta.row(idx) = checkpoints[i];
-    //     // }
 
     //     // Apply joint limits
     //     for (int i = 0; i < N; i++) {
@@ -2062,76 +2089,322 @@ bool MotionGenerator::performSTOMPWithCheckpoints(
 
     //     if (!collides) {
     //         success = true;
-    //         if (trajectoryCost < bestCollisionFreeCost) {
-    //             bestCollisionFreeCost = trajectoryCost;
-    //             bestCollisionFreeTheta = theta;
-    //             qDebug() << "!! Found better collision-free solution at iteration" << iteration
-    //                      << "with cost" << trajectoryCost;
-    //         }
-
-    //         // Check convergence
-    //         if (trajectoryCostDiff < costConvergenceThreshold) {
-    //             noChangeCounter++;
-    //             if (noChangeCounter >= convergencePatience) {
-    //                 qDebug() << "Cost converged after" << iteration << "iterations";
-    //                 break;
-    //             }
-    //         } else {
-    //             noChangeCounter = 0;
-    //         }
+    //         qDebug() << "COLLISION-FREE SOLUTION FOUND at iteration" << iteration;
+    //         qDebug() << "Early termination - trajectory is collision-free!";
+    //         break; // EARLY TERMINATION
+    //     } else {
+    //         qDebug() << "Iteration" << iteration
+    //                  << "- trajectory still has collisions, continuing...";
     //     }
     // }
 
-    // // Use best collision-free solution if found
-    // if (success && bestCollisionFreeTheta.rows() > 0) {
-    //     qDebug() << "!! Using best collision-free solution with cost" << bestCollisionFreeCost;
-    //     theta = bestCollisionFreeTheta;
+    // qDebug() << "STOMP optimization completed after recording" << intermediateThetas.size()
+    //          << "intermediate theta matrices";
+
+    // if (success) {
+    //     qDebug() << "Success! Using collision-free solution found during optimization";
+
+    //     // Convert final theta to trajectory points
+    //     for (int i = 0; i < N; ++i) {
+    //         TrajectoryPoint point;
+    //         point.time = i * dt;
+    //         point.position.resize(config.numJoints);
+    //         point.velocity.resize(config.numJoints);
+    //         point.acceleration.resize(config.numJoints);
+
+    //         // Set positions
+    //         for (int d = 0; d < config.numJoints; ++d) {
+    //             point.position[d] = theta(i, d);
+    //         }
+
+    //         // Calculate velocities and accelerations using finite differences
+    //         if (i == 0) {
+    //             for (int d = 0; d < config.numJoints; ++d) {
+    //                 point.velocity[d] = (theta(1, d) - theta(0, d)) / dt;
+    //                 point.acceleration[d] = (theta(2, d) - 2 * theta(1, d) + theta(0, d)) / (dt * dt);
+    //             }
+    //         } else if (i == N - 1) {
+    //             for (int d = 0; d < config.numJoints; ++d) {
+    //                 point.velocity[d] = (theta(N - 1, d) - theta(N - 2, d)) / dt;
+    //                 point.acceleration[d] = (theta(N - 1, d) - 2 * theta(N - 2, d) + theta(N - 3, d))
+    //                                         / (dt * dt);
+    //             }
+    //         } else {
+    //             for (int d = 0; d < config.numJoints; ++d) {
+    //                 point.velocity[d] = (theta(i + 1, d) - theta(i - 1, d)) / (2 * dt);
+    //                 point.acceleration[d] = (theta(i + 1, d) - 2 * theta(i, d) + theta(i - 1, d))
+    //                                         / (dt * dt);
+    //             }
+    //         }
+
+    //         _path.push_back(point);
+    //     }
+
+    //     // Apply time-optimal scaling
+    //     auto preOptPath = _path;
+    //     _path = computeTimeOptimalScaling(_path);
+
+    //     double originalDuration = preOptPath.back().time;
+    //     double optimizedDuration = _path.back().time;
+    //     double timeSaved = originalDuration - optimizedDuration;
+
+    //     qDebug() << "Time optimization results:";
+    //     qDebug() << "Original duration:" << originalDuration << "s";
+    //     qDebug() << "Optimized duration:" << optimizedDuration << "s";
+    //     qDebug() << "Time saved:" << timeSaved << "s (" << (timeSaved / originalDuration) * 100.0
+    //              << "% reduction)";
     // } else {
-    //     qDebug() << "!! No collision-free solution found after" << config.maxIterations
+    //     qDebug() << "Failed to find collision-free solution after" << config.maxIterations
     //              << "iterations";
     // }
 
-    // // Convert optimized trajectory to path points
-    // _path.clear();
-    // for (int i = 0; i < N; ++i) {
-    //     TrajectoryPoint point;
-    //     point.time = i * dt;
-    //     point.position.resize(config.numJoints);
-    //     point.velocity.resize(config.numJoints);
-    //     point.acceleration.resize(config.numJoints);
-
-    //     // Set positions
-    //     for (int d = 0; d < config.numJoints; ++d) {
-    //         point.position[d] = theta(i, d);
-    //     }
-
-    //     // Calculate velocities and accelerations
-    //     if (i == 0) {
-    //         for (int d = 0; d < config.numJoints; ++d) {
-    //             point.velocity[d] = (theta(1, d) - theta(0, d)) / dt;
-    //             point.acceleration[d] = (theta(2, d) - 2 * theta(1, d) + theta(0, d)) / (dt * dt);
-    //         }
-    //     } else if (i == N - 1) {
-    //         for (int d = 0; d < config.numJoints; ++d) {
-    //             point.velocity[d] = (theta(N - 1, d) - theta(N - 2, d)) / dt;
-    //             point.acceleration[d] = (theta(N - 1, d) - 2 * theta(N - 2, d) + theta(N - 3, d))
-    //                                     / (dt * dt);
-    //         }
-    //     } else {
-    //         for (int d = 0; d < config.numJoints; ++d) {
-    //             point.velocity[d] = (theta(i + 1, d) - theta(i - 1, d)) / (2 * dt);
-    //             point.acceleration[d] = (theta(i + 1, d) - 2 * theta(i, d) + theta(i - 1, d))
-    //                                     / (dt * dt);
-    //         }
-    //     }
-
-    //     _path.push_back(point);
-    // }
-
-    _path = initialTrajectory;
-
     return true;
-    // return success;
+}
+
+Eigen::MatrixXd MotionGenerator::applyQuinticPolynomialResampling(const Eigen::MatrixXd &trajectory, 
+                                                                  double inputDt, 
+                                                                  double outputFrequency)
+{
+    if (outputFrequency <= 0.0 || trajectory.rows() < 2 || inputDt <= 0.0) {
+        qWarning() << "Invalid parameters for quintic polynomial resampling. Returning original trajectory.";
+        return trajectory; // Return original if no resampling needed
+    }
+
+    const int numJoints = trajectory.cols();
+    const int inputPoints = trajectory.rows();
+    const double totalTime = (inputPoints - 1) * inputDt;
+    const double outputDt = 1.0 / outputFrequency;
+    const int outputPoints = static_cast<int>(std::ceil(totalTime / outputDt)) + 1;
+
+    qDebug() << "Quintic polynomial resampling:";
+    qDebug() << "Input points:" << inputPoints << "Total time:" << totalTime << "s";
+    qDebug() << "Output frequency:" << outputFrequency << "Hz, Output points:" << outputPoints;
+
+    // Create time vectors
+    Eigen::VectorXd inputTimes = Eigen::VectorXd::LinSpaced(inputPoints, 0.0, totalTime);
+    Eigen::VectorXd outputTimes = Eigen::VectorXd::LinSpaced(outputPoints, 0.0, totalTime);
+
+    Eigen::MatrixXd resampledTrajectory(outputPoints, numJoints);
+
+    // Fit quintic polynomial for each joint
+    for (int joint = 0; joint < numJoints; ++joint) {
+        // Extract joint positions
+        Eigen::VectorXd jointPositions = trajectory.col(joint);
+        
+        // Boundary conditions: zero velocity and acceleration at endpoints
+        double q0 = jointPositions(0);           // Start position
+        double q0_dot = 0.0;                     // Start velocity = 0
+        double q0_ddot = 0.0;                    // Start acceleration = 0
+        
+        double qf = jointPositions(inputPoints - 1); // End position
+        double qf_dot = 0.0;                     // End velocity = 0
+        double qf_ddot = 0.0;                    // End acceleration = 0
+        
+        // Set up the quintic polynomial coefficient matrix
+        // q(t) = a0 + a1*t + a2*t^2 + a3*t^3 + a4*t^4 + a5*t^5
+        // With boundary conditions:
+        // q(0) = q0, q'(0) = q0_dot, q''(0) = q0_ddot
+        // q(T) = qf, q'(T) = qf_dot, q''(T) = qf_ddot
+        
+        Eigen::Matrix<double, 6, 6> A;
+        A << 1, 0, 0, 0, 0, 0,                    // q(0) = a0
+             0, 1, 0, 0, 0, 0,                    // q'(0) = a1
+             0, 0, 2, 0, 0, 0,                    // q''(0) = 2*a2
+             1, totalTime, std::pow(totalTime, 2), std::pow(totalTime, 3), std::pow(totalTime, 4), std::pow(totalTime, 5), // q(T)
+             0, 1, 2*totalTime, 3*std::pow(totalTime, 2), 4*std::pow(totalTime, 3), 5*std::pow(totalTime, 4),           // q'(T)
+             0, 0, 2, 6*totalTime, 12*std::pow(totalTime, 2), 20*std::pow(totalTime, 3);                               // q''(T)
+        
+        Eigen::VectorXd b(6);
+        b << q0, q0_dot, q0_ddot, qf, qf_dot, qf_ddot;
+        
+        // Solve for polynomial coefficients
+        Eigen::VectorXd coeffs;
+        try {
+            coeffs = A.llt().solve(b);
+        } catch (const std::exception& e) {
+            qWarning() << "Failed to solve quintic polynomial for joint" << joint << ":" << e.what();
+            // Fallback to linear interpolation
+            for (int i = 0; i < outputPoints; ++i) {
+                double t = outputTimes(i);
+                double alpha = t / totalTime;
+                resampledTrajectory(i, joint) = (1.0 - alpha) * q0 + alpha * qf;
+            }
+            continue;
+        }
+        
+        // If we have intermediate points, minimize squared error to the discrete trajectory
+        if (inputPoints > 2) {
+            // Set up least squares problem to minimize ||A_ls * coeffs - b_ls||^2
+            // subject to the boundary constraints
+            
+            Eigen::MatrixXd A_ls(inputPoints - 2, 6); // Exclude boundary points
+            Eigen::VectorXd b_ls(inputPoints - 2);
+            
+            for (int i = 1; i < inputPoints - 1; ++i) {
+                double t = inputTimes(i);
+                A_ls.row(i - 1) << 1, t, std::pow(t, 2), std::pow(t, 3), std::pow(t, 4), std::pow(t, 5);
+                b_ls(i - 1) = jointPositions(i);
+            }
+            
+            // Weighted least squares: minimize boundary constraint violation + trajectory error
+            double lambda = 100.0; // Weight for boundary constraints
+            
+            Eigen::MatrixXd A_total(6 + inputPoints - 2, 6);
+            Eigen::VectorXd b_total(6 + inputPoints - 2);
+            
+            // Boundary constraints (heavily weighted)
+            A_total.topRows(6) = lambda * A;
+            b_total.head(6) = lambda * b;
+            
+            // Trajectory fitting constraints
+            A_total.bottomRows(inputPoints - 2) = A_ls;
+            b_total.tail(inputPoints - 2) = b_ls;
+            
+            // Solve weighted least squares
+            try {
+                coeffs = A_total.colPivHouseholderQr().solve(b_total);
+            } catch (const std::exception& e) {
+                qWarning() << "Failed to solve weighted least squares for joint" << joint << ":" << e.what();
+                // Keep the boundary-only solution
+            }
+        }
+        
+        // Evaluate polynomial at output time points
+        for (int i = 0; i < outputPoints; ++i) {
+            double t = outputTimes(i);
+            double value = coeffs(0) + coeffs(1)*t + coeffs(2)*std::pow(t, 2) + 
+                          coeffs(3)*std::pow(t, 3) + coeffs(4)*std::pow(t, 4) + coeffs(5)*std::pow(t, 5);
+            resampledTrajectory(i, joint) = value;
+        }
+    }
+    
+    return resampledTrajectory;
+}
+
+Eigen::MatrixXd MotionGenerator::applyQuinticPolynomialResamplingWithTimes(const Eigen::MatrixXd &trajectory, 
+                                                                           const Eigen::VectorXd &times, 
+                                                                           double outputFrequency)
+{
+    if (outputFrequency <= 0.0 || trajectory.rows() < 2 || times.size() != trajectory.rows()) {
+        qWarning() << "Invalid parameters for quintic polynomial resampling with times. Returning original trajectory.";
+        return trajectory;
+    }
+
+    const int numJoints = trajectory.cols();
+    const int inputPoints = trajectory.rows();
+    const double totalTime = times(inputPoints - 1) - times(0);
+    const double outputDt = 1.0 / outputFrequency;
+    const int outputPoints = static_cast<int>(std::ceil(totalTime / outputDt)) + 1;
+
+    qDebug() << "Path-preserving quintic polynomial resampling:";
+    qDebug() << "Input points:" << inputPoints << "Total time:" << totalTime << "s";
+    qDebug() << "Output frequency:" << outputFrequency << "Hz, Output points:" << outputPoints;
+
+    // Create output time vector - this preserves the timing structure
+    Eigen::VectorXd outputTimes = Eigen::VectorXd::LinSpaced(outputPoints, times(0), times(inputPoints - 1));
+    Eigen::MatrixXd resampledTrajectory(outputPoints, numJoints);
+
+    // PATH-PRESERVING APPROACH: The geometric path (sequence of waypoints) must be preserved exactly
+    // We only change the timing by fitting quintic polynomials to time segments between waypoints
+    
+    // Find the cumulative path length parameter for the original trajectory
+    std::vector<double> pathParams(inputPoints);
+    pathParams[0] = 0.0;
+    
+    for (int i = 1; i < inputPoints; ++i) {
+        double segmentLength = 0.0;
+        for (int joint = 0; joint < numJoints; ++joint) {
+            double diff = trajectory(i, joint) - trajectory(i-1, joint);
+            segmentLength += diff * diff;
+        }
+        pathParams[i] = pathParams[i-1] + std::sqrt(segmentLength);
+    }
+    
+    double totalPathLength = pathParams[inputPoints - 1];
+    
+    // For each output time, find the corresponding path parameter
+    std::vector<double> outputPathParams(outputPoints);
+    for (int i = 0; i < outputPoints; ++i) {
+        double timeRatio = (outputTimes(i) - times(0)) / totalTime;
+        outputPathParams[i] = timeRatio * totalPathLength;
+    }
+    
+    // For each joint, interpolate along the path preserving the geometric structure
+    for (int joint = 0; joint < numJoints; ++joint) {
+        Eigen::VectorXd jointPositions = trajectory.col(joint);
+        
+        // Create a quintic spline that interpolates all waypoints with respect to path parameter
+        // This preserves the geometric path exactly
+        for (int i = 0; i < outputPoints; ++i) {
+            double targetParam = outputPathParams[i];
+            
+            // Find the segment in the original trajectory
+            int segmentStart = 0;
+            for (int k = 0; k < inputPoints - 1; ++k) {
+                if (pathParams[k] <= targetParam && targetParam <= pathParams[k + 1]) {
+                    segmentStart = k;
+                    break;
+                }
+            }
+            
+            // Handle edge cases
+            if (targetParam <= pathParams[0]) {
+                resampledTrajectory(i, joint) = jointPositions(0);
+                continue;
+            }
+            if (targetParam >= pathParams[inputPoints - 1]) {
+                resampledTrajectory(i, joint) = jointPositions(inputPoints - 1);
+                continue;
+            }
+            
+            // For the segment, use quintic interpolation that preserves the path
+            int segmentEnd = segmentStart + 1;
+            double localParam = (targetParam - pathParams[segmentStart]) / 
+                               (pathParams[segmentEnd] - pathParams[segmentStart]);
+            
+            // Get positions at segment boundaries
+            double q0 = jointPositions(segmentStart);
+            double q1 = jointPositions(segmentEnd);
+            
+            // Estimate velocities at boundaries (finite differences with path parameter)
+            double v0 = 0.0, v1 = 0.0;
+            if (segmentStart > 0) {
+                double dp_prev = pathParams[segmentStart] - pathParams[segmentStart - 1];
+                if (dp_prev > 1e-10) {
+                    v0 = (jointPositions(segmentStart) - jointPositions(segmentStart - 1)) / dp_prev;
+                }
+            }
+            if (segmentEnd < inputPoints - 1) {
+                double dp_next = pathParams[segmentEnd + 1] - pathParams[segmentEnd];
+                if (dp_next > 1e-10) {
+                    v1 = (jointPositions(segmentEnd + 1) - jointPositions(segmentEnd)) / dp_next;
+                }
+            }
+            
+            // Apply boundary conditions for start/end of trajectory (zero velocity)
+            if (segmentStart == 0) v0 = 0.0;
+            if (segmentEnd == inputPoints - 1) v1 = 0.0;
+            
+            // Quintic Hermite interpolation preserving path geometry
+            double t = localParam;
+            double t2 = t * t;
+            double t3 = t2 * t;
+            double t4 = t3 * t;
+            double t5 = t4 * t;
+            
+            // Hermite basis functions for quintic polynomial with zero acceleration at boundaries
+            double h0 = 1 - 10*t3 + 15*t4 - 6*t5;
+            double h1 = 10*t3 - 15*t4 + 6*t5;
+            double h2 = t - 6*t3 + 8*t4 - 3*t5;
+            double h3 = -4*t3 + 7*t4 - 3*t5;
+            
+            double segmentLength = pathParams[segmentEnd] - pathParams[segmentStart];
+            resampledTrajectory(i, joint) = h0 * q0 + h1 * q1 + h2 * v0 * segmentLength + h3 * v1 * segmentLength;
+        }
+    }
+    
+    qDebug() << "Path-preserving resampling completed. Geometric path preserved, timing adjusted.";
+    return resampledTrajectory;
 }
 
 bool MotionGenerator::performSTOMPWithEarlyTermination(

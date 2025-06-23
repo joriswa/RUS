@@ -35,7 +35,37 @@ struct IKResult {
     double min_clearance;
     double avg_clearance;
     int num_links_checked;
+    double min_joint_limit_distance;  // Minimum distance to any joint limit
+    double avg_joint_limit_distance;  // Average distance to joint limits
+    int pose_id = -1;                 // Pose identifier for analysis
+    int run_id = -1;                  // Run identifier for analysis
 };
+
+// Function to calculate distance to joint limits
+std::pair<double, double> calculateJointLimitDistances(const Eigen::Matrix<double, 7, 1>& joint_angles) {
+    // Official Franka Panda joint limits (from franka_ik_He.h)
+    const double q_min[7] = {-2.8973, -1.7628, -2.8973, -3.0718, -2.8973, -0.0175, -2.8973};
+    const double q_max[7] = {2.8973, 1.7628, 2.8973, -0.0698, 2.8973, 3.7525, 2.8973};
+    
+    double min_distance = std::numeric_limits<double>::max();
+    double total_distance = 0.0;
+    
+    for (int i = 0; i < 7; i++) {
+        // Distance to lower and upper limits
+        double dist_to_lower = joint_angles(i) - q_min[i];
+        double dist_to_upper = q_max[i] - joint_angles(i);
+        
+        // Minimum distance to either limit for this joint
+        double joint_min_distance = std::min(dist_to_lower, dist_to_upper);
+        
+        // Update overall minimum
+        min_distance = std::min(min_distance, joint_min_distance);
+        total_distance += joint_min_distance;
+    }
+    
+    double avg_distance = total_distance / 7.0;
+    return std::make_pair(min_distance, avg_distance);
+}
 
 std::vector<Eigen::Affine3d> readPosesFromCSV(const std::string& filename) {
     std::vector<Eigen::Affine3d> poses;
@@ -103,11 +133,18 @@ IKResult testNewtonRaphson(NewtonRaphsonIK& solver, const Eigen::Affine3d& targe
         result.min_clearance = clearance_metrics.min_clearance;
         result.avg_clearance = clearance_metrics.avg_clearance;
         result.num_links_checked = clearance_metrics.num_links_checked;
+        
+        // Calculate joint limit distances
+        auto joint_limit_distances = calculateJointLimitDistances(result.joint_angles);
+        result.min_joint_limit_distance = joint_limit_distances.first;
+        result.avg_joint_limit_distance = joint_limit_distances.second;
     } else {
         result.collision_free = false;
         result.min_clearance = std::numeric_limits<double>::infinity();
         result.avg_clearance = std::numeric_limits<double>::infinity();
         result.num_links_checked = 0;
+        result.min_joint_limit_distance = std::numeric_limits<double>::infinity();
+        result.avg_joint_limit_distance = std::numeric_limits<double>::infinity();
     }
     
     return result;
@@ -147,6 +184,11 @@ IKResult testSimulatedAnnealingGoalPose(UltrasoundScanTrajectoryPlanner& planner
         result.avg_clearance = clearance_metrics.avg_clearance;
         result.num_links_checked = clearance_metrics.num_links_checked;
         
+        // Calculate joint limit distances
+        auto joint_limit_distances = calculateJointLimitDistances(result.joint_angles);
+        result.min_joint_limit_distance = joint_limit_distances.first;
+        result.avg_joint_limit_distance = joint_limit_distances.second;
+        
         // Calculate errors
         robot.setJointAngles(result.joint_angles);
         Eigen::Affine3d achieved_pose = robot.getEndeffectorPose();
@@ -165,6 +207,8 @@ IKResult testSimulatedAnnealingGoalPose(UltrasoundScanTrajectoryPlanner& planner
         result.min_clearance = std::numeric_limits<double>::infinity();
         result.avg_clearance = std::numeric_limits<double>::infinity();
         result.num_links_checked = 0;
+        result.min_joint_limit_distance = std::numeric_limits<double>::infinity();
+        result.avg_joint_limit_distance = std::numeric_limits<double>::infinity();
     }
     
     return result;
@@ -221,6 +265,11 @@ void printSummary(const std::vector<IKResult>& nr_results,
     double nr_avg_clearance_sum = 0, sa_avg_clearance_sum = 0;
     int nr_clearance_count = 0, sa_clearance_count = 0;
     
+    // Joint limit distance tracking
+    double nr_min_joint_limit_sum = 0, sa_min_joint_limit_sum = 0;
+    double nr_avg_joint_limit_sum = 0, sa_avg_joint_limit_sum = 0;
+    int nr_joint_limit_count = 0, sa_joint_limit_count = 0;
+    
     for (const auto& result : nr_results) {
         if (result.success) nr_successes++;
         if (result.collision_free) {
@@ -229,6 +278,12 @@ void printSummary(const std::vector<IKResult>& nr_results,
                 nr_min_clearance_sum += result.min_clearance;
                 nr_avg_clearance_sum += result.avg_clearance;
                 nr_clearance_count++;
+            }
+            // Add joint limit distance calculations for collision-free solutions
+            if (result.min_joint_limit_distance != std::numeric_limits<double>::infinity()) {
+                nr_min_joint_limit_sum += result.min_joint_limit_distance;
+                nr_avg_joint_limit_sum += result.avg_joint_limit_distance;
+                nr_joint_limit_count++;
             }
         }
         nr_total_time += result.solve_time_ms;
@@ -242,6 +297,12 @@ void printSummary(const std::vector<IKResult>& nr_results,
                 sa_min_clearance_sum += result.min_clearance;
                 sa_avg_clearance_sum += result.avg_clearance;
                 sa_clearance_count++;
+            }
+            // Add joint limit distance calculations for collision-free solutions
+            if (result.min_joint_limit_distance != std::numeric_limits<double>::infinity()) {
+                sa_min_joint_limit_sum += result.min_joint_limit_distance;
+                sa_avg_joint_limit_sum += result.avg_joint_limit_distance;
+                sa_joint_limit_count++;
             }
         }
         sa_total_time += result.solve_time_ms;
@@ -304,6 +365,35 @@ void printSummary(const std::vector<IKResult>& nr_results,
                   << " m, avg=" << sa_avg_avg_clearance << " m" << std::endl;
     }
     
+    // Joint limit distance comparisons
+    if (nr_joint_limit_count > 0 && sa_joint_limit_count > 0) {
+        double nr_avg_min_joint_limit = nr_min_joint_limit_sum / nr_joint_limit_count;
+        double sa_avg_min_joint_limit = sa_min_joint_limit_sum / sa_joint_limit_count;
+        double nr_avg_avg_joint_limit = nr_avg_joint_limit_sum / nr_joint_limit_count;
+        double sa_avg_avg_joint_limit = sa_avg_joint_limit_sum / sa_joint_limit_count;
+        
+        std::cout << "- Newton-Raphson joint limits: min=" << std::fixed << std::setprecision(4) << nr_avg_min_joint_limit 
+                  << " rad (" << std::setprecision(1) << (nr_avg_min_joint_limit * 180.0 / M_PI) << "°), avg=" 
+                  << std::setprecision(4) << nr_avg_avg_joint_limit << " rad (" 
+                  << std::setprecision(1) << (nr_avg_avg_joint_limit * 180.0 / M_PI) << "°)" << std::endl;
+        std::cout << "- SA-Optimized joint limits: min=" << std::fixed << std::setprecision(4) << sa_avg_min_joint_limit 
+                  << " rad (" << std::setprecision(1) << (sa_avg_min_joint_limit * 180.0 / M_PI) << "°), avg=" 
+                  << std::setprecision(4) << sa_avg_avg_joint_limit << " rad (" 
+                  << std::setprecision(1) << (sa_avg_avg_joint_limit * 180.0 / M_PI) << "°)" << std::endl;
+        
+        // Safety analysis
+        double critical_threshold = 0.1;  // 0.1 rad ≈ 5.7°
+        double warning_threshold = 0.2;   // 0.2 rad ≈ 11.5°
+        
+        if (nr_avg_min_joint_limit < critical_threshold || sa_avg_min_joint_limit < critical_threshold) {
+            std::cout << "  ⚠️  WARNING: Some solutions are in CRITICAL zone (<0.1 rad from joint limits)" << std::endl;
+        } else if (nr_avg_min_joint_limit < warning_threshold || sa_avg_min_joint_limit < warning_threshold) {
+            std::cout << "  ⚠️  CAUTION: Some solutions are in WARNING zone (<0.2 rad from joint limits)" << std::endl;
+        } else {
+            std::cout << "  ✅ All solutions maintain safe distance from joint limits (≥0.2 rad)" << std::endl;
+        }
+    }
+    
     // Performance comparisons
     if (nr_successes > 0 && sa_successes > 0) {
         double speedup_nr_vs_sa = (sa_total_time / sa_successes) / (nr_total_time / nr_successes);
@@ -338,34 +428,70 @@ int main() {
         // Initialize unified IK solver
         NewtonRaphsonIK ik_solver(robot);
         
-        // Storage for results
+        // Storage for results - now with multiple runs per pose
         std::vector<IKResult> nr_results, sa_results;
+        
+        // Configuration: 100 runs per method per pose
+        const int RUNS_PER_POSE = 100;
         
         // Test each pose
         Eigen::Matrix<double, 7, 1> home_config = Eigen::Matrix<double, 7, 1>::Zero();
         
         for (size_t i = 0; i < target_poses.size(); ++i) {
-            std::cout << "\n--- Pose " << (i + 1) << "/" << target_poses.size() << " ---" << std::endl;
+            std::cout << "\n--- Pose " << (i + 1) << "/" << target_poses.size() << " (" << RUNS_PER_POSE << " runs per method) ---" << std::endl;
             
             const auto& target_pose = target_poses[i];
             
-            // Test Newton-Raphson method
+            // Initialize solver settings once per pose
             ik_solver.setUseDampedLeastSquares(false);  // Use Newton-Raphson
             ik_solver.setPositionTolerance(1e-4);
             ik_solver.setOrientationTolerance(1e-3);
             ik_solver.setDampingFactor(0.001);  // Very small damping for numerical stability
             ik_solver.setAdaptiveDamping(true);  // Use adaptive damping near singularities
             
-            robot.setJointAngles(home_config);
-            auto nr_result = testNewtonRaphson(ik_solver, target_pose, home_config, us_planner, robot);
-            nr_results.push_back(nr_result);
-            printResult(nr_result);
+            // Track statistics for this pose
+            int nr_successes = 0, sa_successes = 0;
+            int nr_collision_free = 0, sa_collision_free = 0;
             
-            // Test simulated annealing selectGoalPose
-            robot.setJointAngles(home_config);
-            auto sa_result = testSimulatedAnnealingGoalPose(us_planner, robot, target_pose);
-            sa_results.push_back(sa_result);
-            printResult(sa_result);
+            // Test Newton-Raphson method - 100 runs
+            std::cout << "  Newton-Raphson: ";
+            for (int run = 0; run < RUNS_PER_POSE; ++run) {
+                robot.setJointAngles(home_config);
+                auto nr_result = testNewtonRaphson(ik_solver, target_pose, home_config, us_planner, robot);
+                nr_result.pose_id = i;  // Add pose ID for analysis
+                nr_result.run_id = run; // Add run ID for analysis
+                nr_results.push_back(nr_result);
+                
+                if (nr_result.success) nr_successes++;
+                if (nr_result.collision_free) nr_collision_free++;
+                
+                // Progress indicator
+                if ((run + 1) % 20 == 0) std::cout << (run + 1) << " ";
+            }
+            std::cout << "| " << nr_successes << "/" << RUNS_PER_POSE << " success, " 
+                      << nr_collision_free << "/" << RUNS_PER_POSE << " collision-free" << std::endl;
+            
+            // Reset counters
+            sa_successes = 0;
+            sa_collision_free = 0;
+            
+            // Test simulated annealing selectGoalPose - 100 runs
+            std::cout << "  SA-Optimized:   ";
+            for (int run = 0; run < RUNS_PER_POSE; ++run) {
+                robot.setJointAngles(home_config);
+                auto sa_result = testSimulatedAnnealingGoalPose(us_planner, robot, target_pose);
+                sa_result.pose_id = i;  // Add pose ID for analysis
+                sa_result.run_id = run; // Add run ID for analysis
+                sa_results.push_back(sa_result);
+                
+                if (sa_result.success) sa_successes++;
+                if (sa_result.collision_free) sa_collision_free++;
+                
+                // Progress indicator
+                if ((run + 1) % 20 == 0) std::cout << (run + 1) << " ";
+            }
+            std::cout << "| " << sa_successes << "/" << RUNS_PER_POSE << " success, " 
+                      << sa_collision_free << "/" << RUNS_PER_POSE << " collision-free" << std::endl;
         }
         
         // Print summary statistics
@@ -373,20 +499,50 @@ int main() {
         
         // Save results to CSV for further analysis
         std::ofstream results_file("two_method_comparison_results.csv");
-        results_file << "pose_id,method,success,time_ms,pos_error,ori_error,iterations,collision_free,min_clearance,avg_clearance,num_links_checked\n";
+        results_file << "pose_id,run_id,method,success,time_ms,pos_error,ori_error,iterations,collision_free,min_clearance,avg_clearance,num_links_checked,q1,q2,q3,q4,q5,q6,q7\n";
         
-        for (size_t i = 0; i < target_poses.size(); ++i) {
-            results_file << i << ",Newton-Raphson," << nr_results[i].success << "," 
-                        << nr_results[i].solve_time_ms << "," << nr_results[i].position_error << "," 
-                        << nr_results[i].orientation_error << "," << nr_results[i].iterations << ","
-                        << nr_results[i].collision_free << "," << nr_results[i].min_clearance << ","
-                        << nr_results[i].avg_clearance << "," << nr_results[i].num_links_checked << "\n";
+        // Output all Newton-Raphson results
+        for (const auto& result : nr_results) {
+            results_file << result.pose_id << "," << result.run_id << ",Newton-Raphson," 
+                        << result.success << "," << result.solve_time_ms << "," 
+                        << result.position_error << "," << result.orientation_error << "," 
+                        << result.iterations << "," << result.collision_free << "," 
+                        << result.min_clearance << "," << result.avg_clearance << "," 
+                        << result.num_links_checked;
             
-            results_file << i << ",SA-Optimized," << sa_results[i].success << "," 
-                        << sa_results[i].solve_time_ms << "," << sa_results[i].position_error << "," 
-                        << sa_results[i].orientation_error << "," << sa_results[i].iterations << ","
-                        << sa_results[i].collision_free << "," << sa_results[i].min_clearance << ","
-                        << sa_results[i].avg_clearance << "," << sa_results[i].num_links_checked << "\n";
+            // Add joint angles (or NaN if failed)
+            if (result.success) {
+                for (int j = 0; j < 7; j++) {
+                    results_file << "," << result.joint_angles(j);
+                }
+            } else {
+                for (int j = 0; j < 7; j++) {
+                    results_file << ",nan";
+                }
+            }
+            results_file << "\n";
+        }
+        
+        // Output all SA-Optimized results
+        for (const auto& result : sa_results) {
+            results_file << result.pose_id << "," << result.run_id << ",SA-Optimized," 
+                        << result.success << "," << result.solve_time_ms << "," 
+                        << result.position_error << "," << result.orientation_error << "," 
+                        << result.iterations << "," << result.collision_free << "," 
+                        << result.min_clearance << "," << result.avg_clearance << "," 
+                        << result.num_links_checked;
+            
+            // Add joint angles (or NaN if failed)
+            if (result.success) {
+                for (int j = 0; j < 7; j++) {
+                    results_file << "," << result.joint_angles(j);
+                }
+            } else {
+                for (int j = 0; j < 7; j++) {
+                    results_file << ",nan";
+                }
+            }
+            results_file << "\n";
         }
         
         std::cout << "\nResults saved to: two_method_comparison_results.csv" << std::endl;

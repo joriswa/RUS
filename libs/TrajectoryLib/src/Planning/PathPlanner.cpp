@@ -1219,16 +1219,38 @@ PathPlanner::CheckpointPlanResult PathPlanner::planCheckpoints(
         if (boundaryIDs.empty()) {
             // No boundaries - entire sequence is one continuous segment
             if (!result.checkpoints.empty()) {
-                result.validSegments.push_back(std::make_pair(0, result.checkpoints.size() - 1));
+                // Find the last valid checkpoint
+                size_t lastValid = result.checkpoints.size() - 1;
+                while (lastValid > 0 && !result.checkpoints[lastValid].second) {
+                    lastValid--;
+                }
+                
+                // Only create segment if we have valid checkpoints
+                if (result.checkpoints[0].second && result.checkpoints[lastValid].second) {
+                    result.validSegments.push_back(std::make_pair(0, lastValid));
+                }
             }
         } else {
             // Create segments between boundaries
             size_t segmentStart = 0;
             
             for (size_t boundaryIdx : boundaryIDs) {
-                // Create segment before boundary (if it has valid length)
+                // Create segment before boundary (if it has valid length and valid endpoints)
                 if (boundaryIdx > segmentStart) {
-                    result.validSegments.push_back(std::make_pair(segmentStart, boundaryIdx - 1));
+                    // Find the last valid checkpoint before the boundary
+                    size_t segmentEnd = boundaryIdx - 1;
+                    while (segmentEnd >= segmentStart && !result.checkpoints[segmentEnd].second) {
+                        if (segmentEnd == 0) break; // Prevent underflow
+                        segmentEnd--;
+                    }
+                    
+                    // Only create segment if both start and end are valid and we have a meaningful segment
+                    if (segmentEnd >= segmentStart && 
+                        result.checkpoints[segmentStart].second && 
+                        result.checkpoints[segmentEnd].second &&
+                        segmentEnd > segmentStart) { // Ensure it's not a single-point segment unless necessary
+                        result.validSegments.push_back(std::make_pair(segmentStart, segmentEnd));
+                    }
                 }
                 
                 // Handle transition after boundary
@@ -1256,6 +1278,7 @@ PathPlanner::CheckpointPlanResult PathPlanner::planCheckpoints(
                         segmentStart = nextValid;
                     } else {
                         // No more valid checkpoints
+                        segmentStart = result.checkpoints.size(); // Mark as invalid for final segment check
                         break;
                     }
                 }
@@ -1263,7 +1286,33 @@ PathPlanner::CheckpointPlanResult PathPlanner::planCheckpoints(
             
             // Create final segment if there are valid checkpoints after last boundary
             if (segmentStart < result.checkpoints.size()) {
-                result.validSegments.push_back(std::make_pair(segmentStart, result.checkpoints.size() - 1));
+                // Find the last valid checkpoint from the end
+                size_t lastValid = result.checkpoints.size() - 1;
+                while (lastValid >= segmentStart && !result.checkpoints[lastValid].second) {
+                    if (lastValid == 0) break; // Prevent underflow
+                    lastValid--;
+                }
+                
+                // Only create segment if we found valid checkpoints and it's not already covered
+                if (lastValid >= segmentStart && 
+                    result.checkpoints[segmentStart].second && 
+                    result.checkpoints[lastValid].second &&
+                    lastValid > segmentStart) { // Ensure it's not a single-point segment unless necessary
+                    
+                    // Check if this segment would be a duplicate of an already added segment
+                    bool isDuplicate = false;
+                    for (const auto& existingSegment : result.validSegments) {
+                        if (existingSegment.first == segmentStart && existingSegment.second == lastValid) {
+                            isDuplicate = true;
+                            qDebug() << "Prevented duplicate segment: Start:" << segmentStart << "End:" << lastValid;
+                            break;
+                        }
+                    }
+                    
+                    if (!isDuplicate) {
+                        result.validSegments.push_back(std::make_pair(segmentStart, lastValid));
+                    }
+                }
             }
         }
 

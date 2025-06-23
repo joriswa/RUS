@@ -135,6 +135,12 @@ bool UltrasoundScanTrajectoryPlanner::planTrajectories()
     auto& jumpPairs = checkpointResult.jumpPairs;
     size_t firstValidIndex = checkpointResult.firstValidIndex;
 
+    // print the indices of the valid segments
+    qDebug() << "Valid segments:";
+    for (const auto &segment : validSegments) {
+        qDebug() << "Start:" << segment.first << "End:" << segment.second;
+    }
+
     if (checkpoints.size() == 1) {
         auto [arm, valid] = checkpoints[0];
 

@@ -45,10 +45,12 @@ cd apps/ComparisonIK
 ../../build/apps/ComparisonIK/TwoMethodComparison
 ```
 
-### 3. Generate Cost Function Data
+### 3. Generate Real PathPlanner Cost Function Data
 ```bash
 ../../build/apps/ComparisonIK/UnderlyingCostFunctionGenerator
 ```
+
+This uses the actual cost function from PathPlanner's `selectGoalPoseSimulatedAnnealing` method.
 
 ### 4. Generate Complete Analysis
 ```bash
@@ -84,7 +86,7 @@ All plots are saved to the `plots/` directory:
 1. **Real scan poses**: Uses actual ultrasound scanning poses from medical scenarios
 2. **Safety analysis**: Evaluates obstacle clearance and joint limit proximity
 3. **Performance metrics**: Execution time comparison between methods
-4. **Cost function insights**: Direct access to underlying optimization landscape
+4. **Real cost function insights**: Direct access to PathPlanner's actual optimization landscape used by `selectGoalPoseSimulatedAnnealing`
 5. **Statistical analysis**: Comprehensive success rates and safety compliance metrics
 
 ## Results Summary

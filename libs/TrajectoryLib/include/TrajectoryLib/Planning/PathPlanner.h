@@ -508,6 +508,12 @@ private:
         CheckpointPlanResult &result,
         const std::vector<size_t> &selectGoalPoseFallbacks);
 
+    /**
+     * @brief Builds valid segments from checkpoints and repositioning indices
+     */
+    void buildValidSegments(CheckpointPlanResult& result, 
+                           const std::vector<size_t>& repositioningIndices);
+
 public:
     /**
      * @brief Generates a smooth trajectory from a set of timed checkpoints

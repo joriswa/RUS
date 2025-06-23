@@ -65,12 +65,13 @@ struct TrialResult
 
 class EnhancedTrajectoryComparison
 {
-private:
+protected:
     std::unique_ptr<RobotArm> robot_;
     std::shared_ptr<BVHTree> obstacle_tree_;
     std::unique_ptr<PathPlanner> path_planner_;
     std::vector<ScanPose> scan_poses_;
     
+private:
     // Consistent trajectory output frequency for both algorithms
     static constexpr double TRAJECTORY_OUTPUT_FREQUENCY = 100.0; // Hz
 
@@ -367,7 +368,7 @@ public:
         config.numNoisyTrajectories = 4;
         config.maxIterations = 30;
         config.numJoints = 7;
-        config.outputFrequency = TRAJECTORY_OUTPUT_FREQUENCY; // Use consistent frequency
+        // config.outputFrequency = TRAJECTORY_OUTPUT_FREQUENCY; // Field doesn't exist in restored version
 
         Eigen::MatrixXd waypoints(2, initial_config.size());
         waypoints.row(0) = initial_config.transpose();

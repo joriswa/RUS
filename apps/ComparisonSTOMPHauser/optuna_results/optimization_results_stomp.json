@@ -1,0 +1,21 @@
+{
+  "algorithm": "stomp",
+  "best_trial": 0,
+  "best_value": 1000.0,
+  "best_parameters": {
+    "stomp_max_iterations": 209,
+    "stomp_num_noisy_trajectories": 9,
+    "stomp_num_best_samples": 10,
+    "stomp_learning_rate": 0.01053502361298551,
+    "stomp_temperature": 7.429539293565018,
+    "stomp_dt": 0.06382378759318304,
+    "stomp_joint_std_dev_0": 0.02290087096831522,
+    "stomp_joint_std_dev_1": 0.16310743842507683,
+    "stomp_joint_std_dev_2": 0.1856387020520132,
+    "stomp_joint_std_dev_3": 0.12974658850767207,
+    "stomp_joint_std_dev_4": 0.2834569874146019,
+    "stomp_joint_std_dev_5": 0.13312959901348034,
+    "stomp_joint_std_dev_6": 0.11549309036064019
+  },
+  "n_trials": 3
+}

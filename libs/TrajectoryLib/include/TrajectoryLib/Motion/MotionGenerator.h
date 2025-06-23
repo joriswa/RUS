@@ -39,7 +39,8 @@ struct StompConfig
     double dt = 0.1;
     double learningRate = .4;
     double temperature = 10.0;
-    double numJoints = 7;
+    int numJoints = 7;
+    double outputFrequency = 50.0; // Hz - desired output frequency for quintic polynomial fitting
 
     Eigen::VectorXd jointStdDevs
         = 0.2 * (Eigen::VectorXd(7) << 0.05, 0.8, 1.0, 0.8, 0.4, 0.4, 0.4).finished();
@@ -217,7 +218,7 @@ public:
 
     void setWaypoints(const Eigen::MatrixXd &waypoints);
 
-    void performHauser(unsigned int maxIterations, const std::string &out = "");
+    void performHauser(unsigned int maxIterations, const std::string &out = "", unsigned int outputFrequency = 100);
     void extracted(double &obstacleCost, Eigen::VectorXd &jointVelocity);
     bool performSTOMP(const StompConfig &config,
                       std::shared_ptr<boost::asio::thread_pool> sharedPool = nullptr);
@@ -331,6 +332,28 @@ private:
                                    const Eigen::VectorXd &velocities,
                                    const Eigen::VectorXd &accelerations);
     Eigen::MatrixXd smoothTrajectoryUpdate(const Eigen::MatrixXd &theta);
+
+    /**
+     * @brief Apply quintic polynomial fitting to resample trajectory at desired output frequency
+     * @param trajectory Input trajectory matrix (N x 7)
+     * @param inputDt Time step of input trajectory
+     * @param outputFrequency Desired output frequency in Hz
+     * @return Resampled trajectory with zero boundary conditions
+     */
+    Eigen::MatrixXd applyQuinticPolynomialResampling(const Eigen::MatrixXd &trajectory, 
+                                                     double inputDt, 
+                                                     double outputFrequency);
+
+    /**
+     * @brief Apply quintic polynomial fitting with non-uniform time spacing
+     * @param trajectory Input trajectory matrix (N x 7)
+     * @param times Time vector corresponding to trajectory points
+     * @param outputFrequency Desired output frequency in Hz
+     * @return Resampled trajectory at uniform output frequency
+     */
+    Eigen::MatrixXd applyQuinticPolynomialResamplingWithTimes(const Eigen::MatrixXd &trajectory, 
+                                                              const Eigen::VectorXd &times, 
+                                                              double outputFrequency);
 
     Eigen::MatrixXd generateNoisyTrajectory(const Eigen::MatrixXd &baseTrajectory,
                                             const Eigen::VectorXd &stdDevs,

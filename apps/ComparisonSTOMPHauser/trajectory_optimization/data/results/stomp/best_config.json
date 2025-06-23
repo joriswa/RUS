@@ -1,0 +1,21 @@
+{
+  "algorithm": "stomp",
+  "best_value": 0.5444539503096804,
+  "best_params": {
+    "stomp_max_iterations": 70,
+    "stomp_num_noisy_trajectories": 10,
+    "stomp_num_best_samples": 13,
+    "stomp_learning_rate": 0.031730693138185544,
+    "stomp_temperature": 43.60889870960598,
+    "stomp_dt": 0.1449303599727216,
+    "stomp_noise_stddev": 0.20215278631604358,
+    "stomp_control_cost_weight": 8.836273300427987,
+    "stomp_smoothness_cost_weight": 1.0024247421993808,
+    "stomp_collision_cost_weight": 27.95725993656989,
+    "stomp_use_finite_differences": true,
+    "stomp_trajectory_length": 89,
+    "stomp_convergence_threshold": 0.0006105091113061596
+  },
+  "n_trials": 400,
+  "timestamp": "2025-06-18T20:25:13.005817"
+}
