@@ -1,6 +1,7 @@
 #include "TrajectoryLib/Motion/MotionGenerator.h"
 #include <future>
 #include <cmath> // Required for std::exp
+#include "TrajectoryLib/Robot/franka_ik_He.h"
 
 Eigen::VectorXd computeAccelerations(const Eigen::VectorXd &positions, double dt)
 {
@@ -2672,4 +2673,247 @@ bool MotionGenerator::performSTOMPWithEarlyTermination(
     }
 
     return success;
+}
+
+std::vector<MotionGenerator::TrajectoryPoint> MotionGenerator::generateTaskSpaceTrajectory(
+    const std::vector<Eigen::Affine3d> &poses,
+    double endEffectorSpeed,
+    const Eigen::VectorXd &initialJoints)
+{
+    std::vector<TrajectoryPoint> trajectory;
+    
+    if (poses.empty()) {
+        return trajectory;
+    }
+    
+    // Initialize joint configuration for IK continuity
+    std::array<double, 7> currentJoints;
+    if (initialJoints.size() >= 7) {
+        for (int i = 0; i < 7; i++) {
+            currentJoints[i] = initialJoints[i];
+        }
+    } else {
+        // Use arm's current joint configuration if no initial joints provided
+        auto armJoints = _arm.getJointAngles();
+        for (int i = 0; i < 7; i++) {
+            currentJoints[i] = armJoints[i];
+        }
+    }
+    
+    // Calculate distances between consecutive poses for timing
+    std::vector<double> distances;
+    std::vector<double> times;
+    double totalTime = 0.0;
+    times.push_back(0.0);
+    
+    for (size_t i = 1; i < poses.size(); i++) {
+        Eigen::Vector3d translation_diff = poses[i].translation() - poses[i-1].translation();
+        double distance = translation_diff.norm();
+        distances.push_back(distance);
+        
+        // Calculate time based on desired end-effector speed
+        double segmentTime = distance / endEffectorSpeed;
+        totalTime += segmentTime;
+        times.push_back(totalTime);
+    }
+    
+    // Interpolate poses in task space to get smooth motion
+    const double dt = 0.001; // 50 Hz sampling rate
+    std::vector<Eigen::Affine3d> interpolatedPoses;
+    std::vector<double> interpolatedTimes;
+    
+    for (double t = 0.0; t <= totalTime; t += dt) {
+        // Find which segment we're in
+        size_t segmentIdx = 0;
+        for (size_t i = 1; i < times.size(); i++) {
+            if (t <= times[i]) {
+                segmentIdx = i - 1;
+                break;
+            }
+        }
+        
+        if (segmentIdx >= poses.size() - 1) {
+            // Use last pose
+            interpolatedPoses.push_back(poses.back());
+        } else {
+            // Interpolate between poses[segmentIdx] and poses[segmentIdx + 1]
+            double segmentStartTime = times[segmentIdx];
+            double segmentEndTime = times[segmentIdx + 1];
+            double segmentDuration = segmentEndTime - segmentStartTime;
+            double alpha = (segmentDuration > 0) ? (t - segmentStartTime) / segmentDuration : 0.0;
+            alpha = std::clamp(alpha, 0.0, 1.0);
+            
+            // Linear interpolation for translation
+            Eigen::Vector3d pos = (1.0 - alpha) * poses[segmentIdx].translation() 
+                                + alpha * poses[segmentIdx + 1].translation();
+            
+            // SLERP for rotation
+            Eigen::Quaterniond q1(poses[segmentIdx].rotation());
+            Eigen::Quaterniond q2(poses[segmentIdx + 1].rotation());
+            Eigen::Quaterniond qInterp = q1.slerp(alpha, q2);
+            
+            Eigen::Affine3d interpolatedPose = Eigen::Affine3d::Identity();
+            interpolatedPose.translation() = pos;
+            interpolatedPose.linear() = qInterp.toRotationMatrix();
+            
+            interpolatedPoses.push_back(interpolatedPose);
+        }
+        interpolatedTimes.push_back(t);
+    }
+    
+    // Convert interpolated poses to joint space using IK
+    std::vector<Eigen::VectorXd> jointTrajectory;
+    
+    for (size_t i = 0; i < interpolatedPoses.size(); i++) {
+        const auto& pose = interpolatedPoses[i];
+        
+        // Convert pose to transformation matrix for IK
+        Eigen::Matrix4d targetMatrix = pose.matrix() * _arm.getEndeffectorTransform().inverse().matrix();
+        
+        bool foundValidSolution = false;
+        std::array<double, 7> bestSolution;
+        double bestCost = std::numeric_limits<double>::infinity();
+        
+        // Try different q7 values to find best IK solution
+        std::default_random_engine gen(static_cast<unsigned>(time(0) + i));
+        std::uniform_real_distribution<double> dis(-0.2, 0.2);
+        
+        for (int attempt = 0; attempt < 1000; ++attempt) {
+            // Use current q7 with small variation for continuity
+            double q7Value = currentJoints[6] + dis(gen);
+            
+            try {
+                std::array<double, 7> solution = franka_IK_EE_CC(targetMatrix, q7Value, currentJoints);
+                
+                // Check if solution is valid (no NaN values)
+                if (std::any_of(solution.begin(), solution.end(), [](double v) { return std::isnan(v); })) {
+                    continue;
+                }
+                
+                // Calculate cost as distance from current configuration
+                double cost = 0.0;
+                for (int j = 0; j < 7; j++) {
+                    double diff = solution[j] - currentJoints[j];
+                    cost += diff * diff;
+                }
+                cost = std::sqrt(cost);
+                
+                // Check for joint limit violations
+                bool withinLimits = true;
+                auto limits = _arm.jointLimits();
+                for (int j = 0; j < 7; j++) {
+                    if (solution[j] < limits[j].first || solution[j] > limits[j].second) {
+                        withinLimits = false;
+                        break;
+                    }
+                }
+                
+                if (withinLimits && cost < bestCost) {
+                    bestCost = cost;
+                    bestSolution = solution;
+                    foundValidSolution = true;
+                    
+                    // If solution is very close, stop searching
+                    if (cost < 0.001) break;
+                }
+            } catch (...) {
+                continue;
+            }
+        }
+        
+        if (!foundValidSolution) {
+            qDebug() << "Failed to find valid IK solution for pose" << i;
+            // Use previous joint configuration as fallback
+            if (!jointTrajectory.empty()) {
+                jointTrajectory.push_back(jointTrajectory.back());
+            } else {
+                // Use initial joints as fallback
+                Eigen::VectorXd fallback(7);
+                for (int j = 0; j < 7; j++) {
+                    fallback[j] = currentJoints[j];
+                }
+                jointTrajectory.push_back(fallback);
+            }
+        } else {
+            // Use the best solution found
+            Eigen::VectorXd joints(7);
+            for (int j = 0; j < 7; j++) {
+                joints[j] = bestSolution[j];
+                currentJoints[j] = bestSolution[j]; // Update for next iteration
+            }
+            jointTrajectory.push_back(joints);
+        }
+    }
+    
+    // Convert joint trajectory to TrajectoryPoint format with polynomial fitting
+    trajectory.reserve(jointTrajectory.size());
+    
+    for (size_t i = 0; i < jointTrajectory.size(); i++) {
+        TrajectoryPoint pt;
+        pt.time = interpolatedTimes[i];
+        pt.position.resize(7);
+        pt.velocity.resize(7);
+        pt.acceleration.resize(7);
+        
+        // Set positions
+        for (int j = 0; j < 7; j++) {
+            pt.position[j] = jointTrajectory[i][j];
+        }
+        
+        // Calculate velocities using finite differences
+        if (i == 0) {
+            // Forward difference for first point
+            if (jointTrajectory.size() > 1) {
+                for (int j = 0; j < 7; j++) {
+                    pt.velocity[j] = (jointTrajectory[1][j] - jointTrajectory[0][j]) / dt;
+                }
+            } else {
+                for (int j = 0; j < 7; j++) {
+                    pt.velocity[j] = 0.0;
+                }
+            }
+        } else if (i == jointTrajectory.size() - 1) {
+            // Backward difference for last point
+            for (int j = 0; j < 7; j++) {
+                pt.velocity[j] = (jointTrajectory[i][j] - jointTrajectory[i-1][j]) / dt;
+            }
+        } else {
+            // Central difference for middle points
+            for (int j = 0; j < 7; j++) {
+                pt.velocity[j] = (jointTrajectory[i+1][j] - jointTrajectory[i-1][j]) / (2.0 * dt);
+            }
+        }
+        
+        // Calculate accelerations using finite differences
+        if (i == 0) {
+            // Forward difference for first point
+            if (jointTrajectory.size() > 2) {
+                for (int j = 0; j < 7; j++) {
+                    double vel_curr = pt.velocity[j];
+                    double vel_next = (jointTrajectory[2][j] - jointTrajectory[1][j]) / dt;
+                    pt.acceleration[j] = (vel_next - vel_curr) / dt;
+                }
+            } else {
+                for (int j = 0; j < 7; j++) {
+                    pt.acceleration[j] = 0.0;
+                }
+            }
+        } else if (i == jointTrajectory.size() - 1) {
+            // Backward difference for last point
+            for (int j = 0; j < 7; j++) {
+                double vel_curr = pt.velocity[j];
+                double vel_prev = (jointTrajectory[i-1][j] - jointTrajectory[i-2][j]) / dt;
+                pt.acceleration[j] = (vel_curr - vel_prev) / dt;
+            }
+        } else {
+            // Central difference for middle points  
+            for (int j = 0; j < 7; j++) {
+                pt.acceleration[j] = (jointTrajectory[i+1][j] - 2.0*jointTrajectory[i][j] + jointTrajectory[i-1][j]) / (dt * dt);
+            }
+        }
+        
+        trajectory.push_back(pt);
+    }
+    
+    return trajectory;
 }

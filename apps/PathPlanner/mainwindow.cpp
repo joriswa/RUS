@@ -891,7 +891,7 @@ void MainWindow::onTrajectorySelected()
             points.push_back(QVector3D(position.x(), position.y(), position.z()));
         }
 
-        saveTrajectoryToCSV("/Users/joris/Uni/MA/Code/Python/angles_lol.csv", _currentTrajectory);
+        saveTrajectoryToCSV("/Users/joris/Uni/MA/Code/Python/clicked_traj.csv", _currentTrajectory);
 
         createPathEntity(_rootEntity, points);
         ui->statusbar->showMessage(QString("Selected trajectory %1 (%2 points)%3")

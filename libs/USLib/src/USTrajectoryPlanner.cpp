@@ -189,9 +189,11 @@ bool UltrasoundScanTrajectoryPlanner::planTrajectories()
 
     // Initial trajectory: current position to first valid checkpoint
     StompConfig config;
+    bool useHauserForRepositioning = true; // TODO: Make this configurable
+
     boost::asio::post(
         *threadPool,
-        [this, &arms, firstValidIndex, &promises, taskIndex = taskIndex++, threadPool, config]() {
+        [this, &arms, firstValidIndex, &promises, taskIndex = taskIndex++, threadPool, config, useHauserForRepositioning]() {
             try {
                 auto motionGen = new MotionGenerator(*_arm);
                 motionGen->setObstacleTree(_obstacleTree);
@@ -201,7 +203,38 @@ bool UltrasoundScanTrajectoryPlanner::planTrajectories()
                 waypoints.row(1) = arms[firstValidIndex].getJointAngles().transpose();
 
                 motionGen->setWaypoints(waypoints);
-                motionGen->performSTOMP(config, threadPool);
+                
+                if (useHauserForRepositioning) {
+                    // Hauser requires geometric repositioning first
+                    // Step 1: Create thread-local PathPlanner and configure it
+                    auto threadPathPlanner = std::make_unique<PathPlanner>();
+                    RobotArm startArm = *_arm;
+                    startArm.setJointAngles(_currentJoints);
+                    threadPathPlanner->setStartPose(startArm);
+                    threadPathPlanner->setObstacleTree(_obstacleTree);
+                    
+                    // Set goal configuration
+                    RobotArm goalArm = *_arm;
+                    goalArm.setJointAngles(arms[firstValidIndex].getJointAngles());
+                    threadPathPlanner->setGoalConfiguration(goalArm);
+                    
+                    bool pathFound = threadPathPlanner->runPathFinding();
+                    
+                    if (pathFound) {
+                        // Step 2: Use Hauser to optimize trajectory along the geometric path
+                        Eigen::MatrixXd geometricPath = threadPathPlanner->getAnglesPath();
+                        motionGen->setWaypoints(geometricPath);
+                        motionGen->performHauser(300, "", 100); // maxIterations, output file, outputFrequency
+                    } else {
+                        // Fallback to STOMP if BiRRT fails
+                        qDebug() << "BiRRT failed for repositioning, falling back to STOMP";
+                        motionGen->setWaypoints(waypoints);
+                        motionGen->performSTOMP(config, threadPool);
+                    }
+                } else {
+                    // Use STOMP for repositioning
+                    motionGen->performSTOMP(config, threadPool);
+                }
 
                 auto result = std::make_pair(motionGen->getPath(), false);
                 delete motionGen;
@@ -223,13 +256,16 @@ bool UltrasoundScanTrajectoryPlanner::planTrajectories()
                     auto motionGen = new MotionGenerator(*_arm);
                     motionGen->setObstacleTree(_obstacleTree);
 
-                    std::vector<Eigen::VectorXd> segment;
+                    // Extract joint configurations from arm segment
+                    std::vector<Eigen::VectorXd> jointCheckpoints;
                     for (size_t i = start; i <= end; i++) {
-                        segment.push_back(arms[i].getJointAngles());
+                        jointCheckpoints.push_back(arms[i].getJointAngles());
                     }
 
-                    motionGen->performSTOMPWithCheckpoints(segment, {}, config, threadPool);
-                    auto result = std::make_pair(motionGen->getPath(), true);
+                    // Generate trajectory from joint checkpoints
+                    auto trajectoryPoints = motionGen->generateTrajectoryFromCheckpoints(jointCheckpoints);
+                    
+                    auto result = std::make_pair(trajectoryPoints, true);
                     delete motionGen;
                     promises[taskIndex].set_value(result);
                 } catch (...) {
@@ -248,7 +284,8 @@ bool UltrasoundScanTrajectoryPlanner::planTrajectories()
                                &promises,
                                taskIndex = taskIndex++,
                                threadPool,
-                               config]() {
+                               config,
+                               useHauserForRepositioning]() {
                                   try {
                                       auto motionGen = new MotionGenerator(*_arm);
                                       motionGen->setObstacleTree(_obstacleTree);
@@ -258,7 +295,38 @@ bool UltrasoundScanTrajectoryPlanner::planTrajectories()
                                       waypoints.row(1) = arms[nextStart].getJointAngles().transpose();
 
                                       motionGen->setWaypoints(waypoints);
-                                      motionGen->performSTOMP(config, threadPool);
+                                      
+                                      if (useHauserForRepositioning) {
+                                          // Hauser requires geometric repositioning first
+                                          // Step 1: Create thread-local PathPlanner and configure it
+                                          auto threadPathPlanner = std::make_unique<PathPlanner>();
+                                          RobotArm startArm = *_arm;
+                                          startArm.setJointAngles(arms[end].getJointAngles());
+                                          threadPathPlanner->setStartPose(startArm);
+                                          threadPathPlanner->setObstacleTree(_obstacleTree);
+                                          
+                                          // Set goal configuration
+                                          RobotArm goalArm = *_arm;
+                                          goalArm.setJointAngles(arms[nextStart].getJointAngles());
+                                          threadPathPlanner->setGoalConfiguration(goalArm);
+                                          
+                                          bool pathFound = threadPathPlanner->runPathFinding();
+                                          
+                                          if (pathFound) {
+                                              // Step 2: Use Hauser to optimize trajectory along the geometric path
+                                              Eigen::MatrixXd geometricPath = threadPathPlanner->getAnglesPath();
+                                              motionGen->setWaypoints(geometricPath);
+                                              motionGen->performHauser(300, "", 100);
+                                          } else {
+                                              // Fallback to STOMP if BiRRT fails
+                                              qDebug() << "BiRRT failed for inter-segment repositioning, falling back to STOMP";
+                                              motionGen->setWaypoints(waypoints);
+                                              motionGen->performSTOMP(config, threadPool);
+                                          }
+                                      } else {
+                                          // Use STOMP for repositioning
+                                          motionGen->performSTOMP(config, threadPool);
+                                      }
 
                                       auto result = std::make_pair(motionGen->getPath(), false);
                                       delete motionGen;

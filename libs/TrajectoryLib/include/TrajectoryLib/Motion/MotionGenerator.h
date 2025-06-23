@@ -260,6 +260,23 @@ public:
     std::vector<MotionGenerator::TrajectoryPoint> generateTrajectoryFromCheckpoints(
         const std::vector<Eigen::VectorXd> &checkpoints);
 
+    /**
+     * @brief Generate trajectory by interpolating task space checkpoints with predefined scan speed
+     * 
+     * This method takes a set of task space poses (checkpoints), interpolates between them
+     * at a constant end-effector speed, and uses the CC IK solver to compute joint configurations.
+     * 
+     * @param taskSpaceCheckpoints Vector of end-effector poses (4x4 transformation matrices)
+     * @param scanSpeed Desired end-effector speed in m/s
+     * @param q7 Redundant parameter for IK solver (7th joint angle)
+     * @param initialJointConfig Initial joint configuration for CC IK
+     * @return Vector of trajectory points with joint configurations
+     */
+    std::vector<MotionGenerator::TrajectoryPoint> generateTaskSpaceTrajectory(
+        const std::vector<Eigen::Affine3d> &poses,
+        double endEffectorSpeed,
+        const Eigen::VectorXd &initialJoints);
+
     bool armHasCollision(std::vector<double> jointPositions);
     bool armHasCollision(RobotArm &arm);
 
