@@ -5,7 +5,7 @@
 #include "Hauser10/DynamicPath.h"
 #include "TrajectoryLib/Robot/RobotArm.h"
 #include "TrajectoryLib/Core/spline.h"
-#include "Logger.h"
+#include "TrajectoryLib/Logger.h"
 #include <boost/asio.hpp>
 #include <boost/asio/post.hpp>
 #include <boost/asio/thread_pool.hpp>
@@ -123,44 +123,6 @@ public:
     double computeCost(const Eigen::MatrixXd &trajectory, double dt) override;
 };
 
-class CheckpointTransitionCostCalculator : public CostCalculator
-{
-public:
-    /**
-     * Constructor that initializes the indices of checkpoints in trajectory
-     * @param checkpointIndices Indices of checkpoint positions in trajectory
-     */
-    CheckpointTransitionCostCalculator(const std::vector<int> &checkpointIndices);
-
-    /**
-     * Compute cost that penalizes velocity discontinuities at checkpoints
-     * @param trajectory Joint trajectory in matrix form
-     * @param dt Time step
-     * @return Transition cost
-     */
-    double computeCost(const Eigen::MatrixXd &trajectory, double dt) override;
-
-private:
-    std::vector<int> _checkpointIndices;
-};
-
-class ApproachDepartureCostCalculator : public CostCalculator
-{
-private:
-    RobotArm _arm;
-    double _approachDistance; // Distance to approach/depart along z-axis
-    double _weight;           // Weight for the cost term
-    double _phaseFraction;    // Fraction of trajectory for approach/departure
-
-public:
-    ApproachDepartureCostCalculator(RobotArm arm,
-                                    double approachDistance = 10.,
-                                    double weight = 1.0,
-                                    double phaseFraction = 0.5);
-
-    double computeCost(const Eigen::MatrixXd &trajectory, double dt) override;
-};
-
 class ConstraintCostCalculator : public CostCalculator
 {
 private:
@@ -171,18 +133,6 @@ public:
     ConstraintCostCalculator(const std::vector<double> &maxVel, const std::vector<double> &maxAcc);
 
     double computeCost(const Eigen::MatrixXd &trajectory, double dt) override;
-};
-
-class MagnetEndPositionCostCalculator : public CostCalculator
-{
-public:
-    MagnetEndPositionCostCalculator(RobotArm arm, const Eigen::VectorXd &targetJointAngles);
-
-    double computeCost(const Eigen::MatrixXd &trajectory, double dt) override;
-
-private:
-    RobotArm _arm;
-    Eigen::VectorXd _targetJointAngles;
 };
 
 class TaskSpacePathTrackingCostCalculator : public CostCalculator
@@ -236,17 +186,6 @@ public:
     double computeCost(const Eigen::MatrixXd &trajectory, double dt) override;
 };
 
-class EndEffectorMovementCostCalculator : public CostCalculator
-{
-private:
-    RobotArm _arm;
-    double _weight;
-
-public:
-    EndEffectorMovementCostCalculator(RobotArm arm, double weight = 1.0);
-    double computeCost(const Eigen::MatrixXd &trajectory, double dt) override;
-};
-
 class MotionGenerator
 {
 public:
@@ -267,15 +206,7 @@ public:
 
     void setWaypoints(const Eigen::MatrixXd &waypoints);
     
-    /**
-     * @brief Set waypoints with exact start position enforcement for trajectory chaining
-     * @param waypoints Waypoint matrix where first row will be overridden
-     * @param exactStartPosition Exact start position to enforce (from previous trajectory end)
-     */
-    void setWaypointsWithExactStart(const Eigen::MatrixXd &waypoints, const Eigen::VectorXd &exactStartPosition);
-
     void performHauser(unsigned int maxIterations, const std::string &out = "", unsigned int outputFrequency = 100);
-    void extracted(double &obstacleCost, Eigen::VectorXd &jointVelocity);
     bool performSTOMP(const StompConfig &config,
                       std::shared_ptr<boost::asio::thread_pool> sharedPool = nullptr);
 
@@ -302,8 +233,6 @@ public:
         bool isCollisionFree;
         Eigen::VectorXd endEffectorMetrics;
     };
-
-    TrajectoryEvaluation evaluateTrajectory(const Eigen::MatrixXd &trajectory, double dt);
 
     // Apply the probability-weighted update to a trajectory
     Eigen::MatrixXd applyProbabilisticUpdate(const Eigen::MatrixXd &currentTrajectory,
@@ -341,17 +270,12 @@ public:
                                      const StompConfig &config,
                                      std::shared_ptr<boost::asio::thread_pool> sharedPool = nullptr);
 
-    bool performSTOMPWithEarlyTermination(const StompConfig &config,
-                                          std::shared_ptr<boost::asio::thread_pool> sharedPool,
-                                          std::vector<Eigen::MatrixXd> &intermediateThetas);
-
     /**
      * @brief Print the maximum velocity values for each joint
      * 
      * Outputs the maximum joint velocities to the console, useful for
      * debugging and analysis of trajectory performance.
      */
-    void printMaximumVelocity() const;
 
 private:
     std::unique_ptr<CompositeCostCalculator> _costCalculator;
