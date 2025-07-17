@@ -30,27 +30,32 @@ void Robot::addChild(std::shared_ptr<Robot> child) {
 }
 
 void Robot::rotate(const Eigen::Vector3d& point, const Eigen::AngleAxisd& rotation) {
+    // Translate position to rotation origin, apply rotation, then translate back
     Eigen::Vector3d translatedPosition = position - point;
     translatedPosition = rotation * translatedPosition;
     position = translatedPosition + point;
 
     orientation = rotation;
 
+    // Update articulated transform with new position and orientation
     _articulatedTransform = Eigen::Translation3d(position) * orientation;
 }
 
 void Robot::translate(const Eigen::Vector3d& translation) {
     position += translation;
 
+    // Update articulated transform with new position
     _articulatedTransform = Eigen::Translation3d(position) * orientation;
 }
 
 void Robot::update() {
+    // Apply rotation for each local joint based on current joint values
     for (const auto& articulation : _localRotations) {
         Eigen::AngleAxisd rotation(articulation->current, articulation->axis);
         rotate(articulation->origin, rotation);
     }
 
+    // Recursively update all child robots
     for (const auto& child : _children) {
         child->update();
     }

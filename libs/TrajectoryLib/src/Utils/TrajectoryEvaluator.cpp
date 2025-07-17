@@ -17,10 +17,12 @@ std::vector<double> TrajectoryEvaluator::computeJointDistancesOverTime() const
 {
     std::vector<double> jointDistances;
 
+    // Need at least 2 points to compute distances
     if (_trajectory.size() < 2) {
         return jointDistances;
     }
 
+    // Compute distance between consecutive joint configurations
     for (size_t i = 1; i < _trajectory.size(); ++i) {
         Eigen::VectorXd currentAngles
             = Eigen::Map<const Eigen::VectorXd>(_trajectory[i].second.data(),
@@ -29,6 +31,7 @@ std::vector<double> TrajectoryEvaluator::computeJointDistancesOverTime() const
             = Eigen::Map<const Eigen::VectorXd>(_trajectory[i - 1].second.data(),
                                                 _trajectory[i - 1].second.size());
 
+        // Use Euclidean norm to compute joint space distance
         double distance = (currentAngles - previousAngles).norm();
         jointDistances.push_back(distance);
     }
@@ -41,6 +44,7 @@ std::vector<double> TrajectoryEvaluator::computeDisplacementOverTime()
 {
     std::vector<double> displacements;
 
+    // Need at least 2 points to compute displacements  
     if (_trajectory.size() < 2) {
         return displacements;
     }

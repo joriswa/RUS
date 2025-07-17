@@ -781,9 +781,10 @@ std::vector<Eigen::Matrix4d> MainWindow::readPosesFromCSV(const std::string &fil
 
         Eigen::Matrix4d T = Eigen::Matrix4d::Identity();
         T.block<3, 3>(0, 0) = q.toRotationMatrix();
+
         T.block<3, 1>(0, 3) = Eigen::Vector3d(x, y, z);
 
-        const Eigen::Vector3d local_move(0.0, 0.0, -0.02);
+        const Eigen::Vector3d local_move(0.0, 0.0, 0.0);
         T.block<3, 1>(0, 3) += T.block<3, 3>(0, 0) * local_move;
 
         poses.push_back(T);
@@ -970,9 +971,12 @@ void MainWindow::onScanPoseSelected()
         Eigen::Matrix4d poseMatrix = _scanPoses[poseIndex];
         Eigen::Affine3d targetPose(poseMatrix);
 
-        auto temp = _usPlanner->getPathPlanner()->selectGoalPose(targetPose).first;
-        _robotArm->setJointAngles(temp.getJointAngles());
-        _robotArm->updateEntities();
+        auto [temp, succ] = _usPlanner->getPathPlanner()->selectGoalPoseSimulatedAnnealing(
+            targetPose);
+        if (succ) {
+            _robotArm->setJointAngles(temp.getJointAngles());
+            _robotArm->updateEntities();
+        }
     }
 }
 
@@ -1124,49 +1128,23 @@ void MainWindow::planSTOMPBetweenFirstTwoPoses()
         config.dt = 0.1;
         config.jointStdDevs = Eigen::VectorXd::Constant(7, 0.1);
 
-        // Vector to store intermediate theta matrices
-        std::vector<Eigen::MatrixXd> intermediateThetas;
+        // Vector to store intermediate theta matrices (no longer needed)
+        // std::vector<Eigen::MatrixXd> intermediateThetas;
 
-        // Run STOMP with early termination
-        bool success = motionGenerator
-                           ->performSTOMPWithEarlyTermination(config,
-                                                              nullptr, // Use default thread pool
-                                                              intermediateThetas);
+        // Run STOMP (regular version)
+        bool success = motionGenerator->performSTOMP(config, nullptr);
 
         if (success) {
-            _intermediateThetas = intermediateThetas;
+            // _intermediateThetas = intermediateThetas; // No longer available
 
-            ui->statusbar->showMessage(
-                QString("STOMP successful! Found collision-free solution after %1 iterations")
-                    .arg(intermediateThetas.size()));
+            ui->statusbar->showMessage("STOMP successful! Found collision-free solution");
 
             // Save the final trajectory
             motionGenerator->saveTrajectoryToCSV(
-                "/Users/joris/Uni/MA/Code/Python/stomp_early_termination.csv");
+                "/Users/joris/Uni/MA/Code/Python/stomp_trajectory.csv");
 
-            // Save intermediate thetas for analysis
-            for (size_t i = 0; i < intermediateThetas.size(); ++i) {
-                std::string filename = "/Users/joris/Uni/MA/Code/Python/intermediate_theta_"
-                                       + std::to_string(i) + ".csv";
-
-                std::ofstream file(filename);
-                if (file.is_open()) {
-                    file << "time,";
-                    for (int j = 0; j < 7; ++j) {
-                        file << "joint_" << j << (j == 6 ? "\n" : ",");
-                    }
-
-                    for (int row = 0; row < intermediateThetas[i].rows(); ++row) {
-                        file << row * config.dt << ",";
-                        for (int col = 0; col < intermediateThetas[i].cols(); ++col) {
-                            file << intermediateThetas[i](row, col) << (col == 6 ? "\n" : ",");
-                        }
-                    }
-                    file.close();
-                }
-            }
-
-            qDebug() << "Saved" << intermediateThetas.size() << "intermediate theta matrices";
+            // Note: Intermediate theta saving removed since performSTOMP doesn't provide them
+            qDebug() << "Saved final trajectory to CSV";
 
             // Get the final path for visualization
             auto path = motionGenerator->getPath();
@@ -1184,7 +1162,6 @@ void MainWindow::planSTOMPBetweenFirstTwoPoses()
             createPathEntity(_rootEntity, points);
 
         } else {
-            _intermediateThetas.clear();
             ui->statusbar->showMessage(
                 "STOMP failed to find collision-free solution within iteration limit.");
         }

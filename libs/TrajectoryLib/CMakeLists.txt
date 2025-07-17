@@ -18,7 +18,6 @@ find_package(orocos_kdl REQUIRED)
 set(TRAJECTORYLIB_SOURCES
     # Core module
     src/Core/Util.cpp
-    src/Core/utils.cpp
     
     # Robot module  
     src/Robot/Robot.cpp
@@ -31,13 +30,9 @@ set(TRAJECTORYLIB_SOURCES
     
     # Motion module
     src/Motion/MotionGenerator.cpp
-    src/Motion/stomp.cpp
     
     # Visualization module
     src/Visualization/trackballcameracontroller.cpp
-    
-    # Utils module
-    src/Utils/TrajectoryEvaluator.cpp
 )
 
 # Create static library

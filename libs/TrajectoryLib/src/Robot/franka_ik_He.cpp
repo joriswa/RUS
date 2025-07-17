@@ -8,6 +8,7 @@ std::array<std::array<double, 7>, 4> franka_IK_EE(Eigen::Affine3d O_T_EE_array,
                                                   double q7,
                                                   std::array<double, 7> q_actual_array)
 {
+    // Initialize all solutions as NaN (invalid)
     const std::array<std::array<double, 7>, 4> q_all_NAN = {{{{NAN, NAN, NAN, NAN, NAN, NAN, NAN}},
                                                              {{NAN, NAN, NAN, NAN, NAN, NAN, NAN}},
                                                              {{NAN, NAN, NAN, NAN, NAN, NAN, NAN}},
@@ -17,13 +18,15 @@ std::array<std::array<double, 7>, 4> franka_IK_EE(Eigen::Affine3d O_T_EE_array,
 
     Eigen::Map<Eigen::Matrix<double, 4, 4> > O_T_EE(O_T_EE_array.data());
 
-    const double d1 = 0.3330;
-    const double d3 = 0.3160;
-    const double d5 = 0.3840;
-    const double d7e = 0.107;
-    const double a4 = 0.0825;
-    const double a7 = 0.0880;
+    // Franka Panda DH parameters (in meters)
+    const double d1 = 0.3330;  // Base to joint 1
+    const double d3 = 0.3160;  // Joint 1 to joint 3
+    const double d5 = 0.3840;  // Joint 3 to joint 5
+    const double d7e = 0.107;  // Joint 5 to end effector
+    const double a4 = 0.0825;  // Link offset
+    const double a7 = 0.0880;  // End effector offset
 
+    // Precomputed constants for efficiency
     const double LL24 = 0.10666225;    // a4^2 + d3^2
     const double LL46 = 0.15426225;    // a4^2 + d5^2
     const double L24 = 0.326591870689; // sqrt(LL24)
@@ -33,20 +36,24 @@ std::array<std::array<double, 7>, 4> franka_IK_EE(Eigen::Affine3d O_T_EE_array,
     const double theta342 = 1.31542071191;  // atan(d3/a4);
     const double theta46H = 0.211626808766; // acot(d5/a4);
 
+    // Franka Panda joint limits (radians)
     const std::array<double, 7> q_min = {
         {-2.8973, -1.7628, -2.8973, -3.0718, -2.8973, -0.0175, -2.8973}};
     const std::array<double, 7> q_max = {{2.8973, 1.7628, 2.8973, -0.0698, 2.8973, 3.7525, 2.8973}};
 
+    // Check if q7 is within valid range
     if (q7 <= q_min[6] || q7 >= q_max[6])
         return q_all_NAN;
     else
         for (int i = 0; i < 4; i++)
             q_all[i][6] = q7;
 
-    // compute p_6
+    // Extract end effector pose components
     Eigen::Matrix3d R_EE = O_T_EE.topLeftCorner<3, 3>();
     Eigen::Vector3d z_EE = O_T_EE.block<3, 1>(0, 2);
     Eigen::Vector3d p_EE = O_T_EE.block<3, 1>(0, 3);
+    
+    // Compute wrist center position (p_7) by moving back along z-axis
     Eigen::Vector3d p_7 = p_EE - d7e * z_EE;
 
     Eigen::Vector3d x_EE_6;

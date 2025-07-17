@@ -1,6 +1,9 @@
 #include "TrajectoryLib/Planning/PathPlanner.h"
 #include "TrajectoryLib/Robot/franka_ik_He.h"
 #include <iostream>
+#include <thread>
+#include <mutex>
+#include <future>
 
 PathPlanner::PathPlanner() {}
 
@@ -502,6 +505,24 @@ std::pair<RobotArm, bool> PathPlanner::selectGoalPose(const Eigen::Affine3d &pos
         success = false;
     } else {
         finalArm.setJointAngles(bestSolution);
+        
+        // Sanity check: Verify pose accuracy before declaring success
+        Eigen::Affine3d achieved_pose = finalArm.getEndeffectorPose();
+        Eigen::Vector3d position_error = pose.translation() - achieved_pose.translation();
+        double pos_error = position_error.norm();
+        
+        Eigen::Matrix3d rotation_error = pose.linear() * achieved_pose.linear().transpose();
+        Eigen::AngleAxisd angle_axis(rotation_error);
+        double orientation_error = std::abs(angle_axis.angle());
+        
+        // Define acceptable tolerances (aligned with Franka Panda ±0.1mm repeatability)
+        const double max_position_error = 0.001;     // 1mm tolerance
+        const double max_orientation_error = 0.017;  // ~1 degree tolerance (0.017 radians)
+        
+        // Fail if pose accuracy is insufficient
+        if (pos_error > max_position_error || orientation_error > max_orientation_error) {
+            success = false;
+        }
     }
 
     return std::make_pair(finalArm, success);
@@ -1156,18 +1177,14 @@ std::pair<RobotArm, bool> PathPlanner::selectGoalPoseSimulatedAnnealing(const Ei
                                                                          int max_iterations, 
                                                                          int max_no_improvement)
 {
-    // Initialize random number generator
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    std::uniform_real_distribution<> dis(-2.8973, 2.8973);
-    std::uniform_real_distribution<> acceptance_dis(0.0, 1.0);
+    // Note: Function name kept for API compatibility, but now implements parallelized exhaustive grid search
     
     // Get starting configuration
     Eigen::Matrix<double, 7, 1> jointAngles = _startArm.getJointAngles();
     std::array<double, 7> jointAnglesArray;
     Eigen::Map<Eigen::Matrix<double, 7, 1>>(jointAnglesArray.data()) = jointAngles;
     
-    // Transform target pose (same as original selectGoalPose)
+    // Transform target pose (same as original)
     Eigen::Matrix3d Rx = Eigen::AngleAxisd(M_PI, Eigen::Vector3d::UnitX()).toRotationMatrix();
     Eigen::Matrix3d Ry = Eigen::AngleAxisd(0, Eigen::Vector3d::UnitY()).toRotationMatrix();
     Eigen::Matrix3d Rz = Eigen::AngleAxisd(M_PI, Eigen::Vector3d::UnitZ()).toRotationMatrix();
@@ -1178,173 +1195,166 @@ std::pair<RobotArm, bool> PathPlanner::selectGoalPoseSimulatedAnnealing(const Ei
     
     Eigen::Affine3d total = pose * _startArm.getEndeffectorTransform().inverse();
     
-    // Initialize current solution and cost
-    Eigen::Matrix<double, 7, 1> current_solution;
-    double current_cost = std::numeric_limits<double>::infinity();
-    bool has_valid_solution = false;
+    // Grid search parameters based on Franka Emika Panda 14-bit encoder precision
+    const double q7_min = -2.8973;  // Joint 7 limits for Franka Panda
+    const double q7_max = 2.8973;
+    const int encoder_steps = 16384;  // 14-bit encoder precision (2^14)
+    
+    // Generate q7 grid values based on encoder precision
+    std::vector<double> q7_values;
+    q7_values.reserve(encoder_steps);
+    double q7_range = q7_max - q7_min;
+    double step_size = q7_range / (encoder_steps - 1);
+    
+    for (int i = 0; i < encoder_steps; ++i) {
+        double q7 = q7_min + i * step_size;
+        q7_values.push_back(q7);
+    }
+    
+    // Parallel processing setup - always use parallel processing
+    size_t effective_threads = std::thread::hardware_concurrency();
     
     // Best solution tracking
     Eigen::Matrix<double, 7, 1> best_solution;
     double best_cost = std::numeric_limits<double>::infinity();
+    bool has_valid_solution = false;
+    std::mutex result_mutex;
     
-    // Temperature and iteration tracking
-    double temperature = T_max;
-    int no_improvement_counter = 0;
+    // PARALLEL PROCESSING with Boost.Asio (always enabled)
+    boost::asio::thread_pool pool(effective_threads);
     
-    // Simulated Annealing main loop
-    for (int iter = 0; iter < max_iterations && temperature > T_min; ++iter) {
+    // Calculate optimal chunk size for 14-bit encoder precision
+    size_t target_chunks = effective_threads * 4;  // More chunks for better load balancing with high precision
+    size_t chunk_size = std::max(static_cast<size_t>(256), q7_values.size() / target_chunks);  // Minimum 256 per chunk
+    
+    // Vector to hold futures
+    std::vector<std::future<void>> futures;
+    futures.reserve((q7_values.size() + chunk_size - 1) / chunk_size);
         
-        // Generate perturbation radius based on temperature
-        double perturbation_radius = 2.8973 * (temperature / T_max);
-        
-        // Generate random q7 value with temperature-based exploration
-        double randomValue;
-        if (has_valid_solution && temperature < T_max * 0.5) {
-            // Adaptive sampling around best solution when temperature is low
-            double best_q7 = best_solution[6];
-            std::uniform_real_distribution<> adaptive_dis(
-                std::max(-2.8973, best_q7 - perturbation_radius),
-                std::min(2.8973, best_q7 + perturbation_radius)
+        // Launch parallel tasks
+        for (size_t start = 0; start < q7_values.size(); start += chunk_size) {
+            size_t end = std::min(start + chunk_size, q7_values.size());
+            
+            // Create packaged task for this chunk
+            auto task = std::make_shared<std::packaged_task<void()>>(
+                [this, start, end, &q7_values, total, jointAnglesArray, &best_solution, &best_cost, &has_valid_solution, &result_mutex, pose]() {
+                    
+                    // Local best for this chunk
+                    Eigen::Matrix<double, 7, 1> local_best_solution;
+                    double local_best_cost = std::numeric_limits<double>::infinity();
+                    bool local_has_solution = false;
+                    
+                    // Process chunk of q7 values
+                    for (size_t i = start; i < end; ++i) {
+                        double q7 = q7_values[i];
+                        
+                        // Solve IK for this q7 value
+                        std::array<std::array<double, 7>, 4> ikSolutions = franka_IK_EE(total, q7, jointAnglesArray);
+                        
+                        // Evaluate all IK solutions
+                        for (const auto& sol : ikSolutions) {
+                            if (std::any_of(sol.begin(), sol.end(), [](double val) { return std::isnan(val); })) {
+                                continue;
+                            }
+                            
+                            Eigen::Map<const Eigen::Matrix<double, 7, 1>> angles(sol.data());
+                            RobotArm temp = _startArm;
+                            temp.setJointAngles(angles);
+                            
+                            // Check for collisions
+                            if (armHasCollision(temp)) {
+                                continue;
+                            }
+                            
+                            // Compute comprehensive cost (same as ComparisonIK implementation)
+                            double cost = 0.0;
+                            
+                            // 1. POSE ERROR (HIGHEST PRIORITY)
+                            Eigen::Affine3d current_pose = temp.getEndeffectorPose();
+                            Eigen::Vector3d position_error = pose.translation() - current_pose.translation();
+                            double pos_error = position_error.norm();
+                            
+                            Eigen::Matrix3d rotation_error = pose.linear() * current_pose.linear().transpose();
+                            Eigen::AngleAxisd angle_axis(rotation_error);
+                            double orientation_error = std::abs(angle_axis.angle());
+                            
+                            double pose_error = pos_error + 0.1 * orientation_error;
+                            cost += 100.0 * pose_error; // Heavy weight to prioritize pose accuracy
+                            
+                            // 2. Clearance-based cost (if obstacle tree is available)
+                            if (_obstacleTree) {
+                                auto clearance_metrics = computeArmClearance(temp);
+                                const double threshold = 0.3;
+                                
+                                // Penalty based on minimum clearance
+                                if (clearance_metrics.min_clearance < threshold) {
+                                    double dist = clearance_metrics.min_clearance;
+                                    double clearance_penalty = 1.0 / (1.0 + std::exp(100 * (dist - threshold)));
+                                    cost += clearance_penalty;
+                                }
+                            }
+                            
+                            // 3. Add manipulability (lowest priority)
+                            double manipulability = temp.computeManipulability();
+                            cost += 0.25 * (1.0 - manipulability);
+                            
+                            // Update local best
+                            if (!local_has_solution || cost < local_best_cost) {
+                                local_best_solution = angles;
+                                local_best_cost = cost;
+                                local_has_solution = true;
+                            }
+                        }
+                    }
+                    
+                    // Update global best (thread-safe)
+                    if (local_has_solution) {
+                        std::lock_guard<std::mutex> lock(result_mutex);
+                        if (!has_valid_solution || local_best_cost < best_cost) {
+                            best_solution = local_best_solution;
+                            best_cost = local_best_cost;
+                            has_valid_solution = true;
+                        }
+                    }
+                }
             );
-            randomValue = adaptive_dis(gen);
-        } else {
-            // Full range sampling when temperature is high
-            randomValue = dis(gen);
+            
+            futures.push_back(task->get_future());
+            boost::asio::post(pool, [task]() { (*task)(); });
         }
         
-        // Solve IK for this random value
-        std::array<std::array<double, 7>, 4> ikSolutions = franka_IK_EE(total, randomValue, jointAnglesArray);
+        // Wait for all tasks to complete
+        pool.join();
         
-        // Evaluate all IK solutions
-        for (const auto& sol : ikSolutions) {
-            if (std::any_of(sol.begin(), sol.end(), [](double val) { return std::isnan(val); })) {
-                continue;
-            }
-            
-            Eigen::Map<const Eigen::Matrix<double, 7, 1>> angles(sol.data());
-            RobotArm temp = _startArm;
-            temp.setJointAngles(angles);
-            
-            // Check for collisions
-            if (armHasCollision(temp)) {
-                continue;
-            }
-            
-            // Compute cost with improved clearance-aware cost function
-            double cost = 0.0;
-            const double collision_threshold = 0.1;   // Critical collision threshold (5cm)
-            const double safety_threshold = 0.20;     // Safety comfort zone (15cm)
-            const double optimal_threshold = 0.30;    // Optimal clearance target (30cm)
-            
-            int numLinks = static_cast<int>(temp.getLinkBoundingBoxes().size());
-            double min_clearance = std::numeric_limits<double>::infinity();
-            double total_clearance = 0.0;
-            int valid_links = 0;
-            
-            // Compute clearance metrics for all links (excluding base and end-effector)
-            for (int linkIdx = 2; linkIdx < numLinks - 2; ++linkIdx) {
-                auto bboxCenter = std::get<0>(temp.getLinkBoundingBoxes()[linkIdx]);
-                double dist = 0.0;
-                if (_obstacleTree) {
-                    dist = std::get<0>(_obstacleTree->getDistanceAndClosestPoint(bboxCenter));
-                }
-                
-                min_clearance = std::min(min_clearance, dist);
-                total_clearance += dist;
-                valid_links++;
-                
-                // Multi-tier clearance penalty system
-                double link_penalty = 0.0;
-                
-                if (dist < collision_threshold) {
-                    // Critical penalty for very close to collision
-                    link_penalty = 2.0 * (1.0 - dist / collision_threshold);
-                } else if (dist < safety_threshold) {
-                    // High penalty for unsafe proximity
-                    link_penalty = 1.0 * (1.0 - (dist - collision_threshold) / (safety_threshold - collision_threshold));
-                } else if (dist < optimal_threshold) {
-                    // Moderate penalty for suboptimal clearance
-                    link_penalty = 0.3 * (1.0 - (dist - safety_threshold) / (optimal_threshold - safety_threshold));
-                }
-                // No penalty for distances >= optimal_threshold
-                
-                cost += link_penalty / valid_links;
-            }
-            
-            // Additional clearance-based cost components
-            double avg_clearance = (valid_links > 0) ? total_clearance / valid_links : 0.0;
-            
-            // Penalty for low minimum clearance (prioritize worst-case safety)
-            if (min_clearance < optimal_threshold) {
-                double min_clearance_penalty = 0.4 * std::exp(-min_clearance / 0.1);
-                cost += min_clearance_penalty;
-            }
-            
-            // Reward configurations with good average clearance
-            if (avg_clearance > safety_threshold) {
-                double clearance_bonus = -0.2 * std::min(1.0, (avg_clearance - safety_threshold) / (optimal_threshold - safety_threshold));
-                cost += clearance_bonus;
-            }
-            
-            // Cap the clearance-based cost component
-            cost = std::max(0.0, std::min(cost, 2.0));
-            
-            // Add manipulability bonus (reduced weight to prioritize safety)
-            cost += 0.15 * temp.computeManipulability();
-            
-            // Simulated Annealing acceptance criterion
-            bool accept = false;
-            
-            if (!has_valid_solution) {
-                // Accept first valid solution
-                accept = true;
-                has_valid_solution = true;
-                current_solution = angles;
-                current_cost = cost;
-            } else if (cost < current_cost) {
-                // Accept better solution
-                accept = true;
-            } else {
-                // Accept worse solution with probability exp(-ΔE/T)
-                double delta = cost - current_cost;
-                double acceptance_probability = std::exp(-delta / temperature);
-                
-                if (acceptance_dis(gen) < acceptance_probability) {
-                    accept = true;
-                }
-            }
-            
-            if (accept) {
-                current_solution = angles;
-                current_cost = cost;
-                
-                // Update best solution if this is the best so far
-                if (cost < best_cost) {
-                    best_solution = angles;
-                    best_cost = cost;
-                    no_improvement_counter = 0;
-                } else {
-                    no_improvement_counter++;
-                }
-            }
+        // Wait for all futures
+        for (auto& fut : futures) {
+            fut.get();
         }
-        
-        // Cool down temperature
-        temperature *= alpha;
-        
-        // Early termination if no improvement for too long
-        if (no_improvement_counter >= max_no_improvement) {
-            break;
-        }
-    }
     
+    // Return result with pose accuracy sanity check
     RobotArm finalArm = _startArm;
-    bool success = true;
+    bool success = has_valid_solution && best_cost != std::numeric_limits<double>::infinity();
     
-    if (!has_valid_solution || best_cost == std::numeric_limits<double>::infinity()) {
-        success = false;
-    } else {
+    if (success) {
         finalArm.setJointAngles(best_solution);
+        
+        // Sanity check: Verify pose accuracy before declaring success
+        Eigen::Affine3d achieved_pose = finalArm.getEndeffectorPose();
+        Eigen::Vector3d position_error = pose.translation() - achieved_pose.translation();
+        double pos_error = position_error.norm();
+        
+        Eigen::Matrix3d rotation_error = pose.linear() * achieved_pose.linear().transpose();
+        Eigen::AngleAxisd angle_axis(rotation_error);
+        double orientation_error = std::abs(angle_axis.angle());
+        
+        // Define acceptable tolerances (aligned with Franka Panda ±0.1mm repeatability)
+        const double max_position_error = 0.001;     // 1mm tolerance
+        const double max_orientation_error = 0.017;  // ~1 degree tolerance (0.017 radians)
+        
+        // Fail if pose accuracy is insufficient
+        if (pos_error > max_position_error || orientation_error > max_orientation_error) {
+            success = false;
+        }
     }
 
     return std::make_pair(finalArm, success);

@@ -23,23 +23,87 @@
 #include <unordered_map>
 #include <vector>
 
+/**
+ * @brief Manages a collection of robots with XML/URDF parsing and visualization
+ * 
+ * The RobotManager class handles multiple robot instances, providing functionality
+ * for parsing robot descriptions from XML/URDF files, managing transformations,
+ * and creating Qt3D visualization entities for robot display and collision detection.
+ */
 class RobotManager
 {
 public:
+    // Robot management
+    /**
+     * @brief Add a robot to the manager
+     * @param actor Robot to add
+     */
     void addRobot(std::shared_ptr<Robot> actor);
+    
+    /**
+     * @brief Remove a robot from the manager
+     * @param actor Robot to remove
+     */
     void removeRobot(const std::shared_ptr<Robot> &actor);
+    
+    /**
+     * @brief Get all managed robots (excluding first robot if it exists)
+     * @return Vector of robot pointers
+     */
     std::vector<std::shared_ptr<Robot>> getRobots() const;
+    
+    /**
+     * @brief Apply transformation to a specific robot
+     * @param actor Robot to transform
+     * @param transform Transformation to apply
+     */
     void transformRobots(const std::shared_ptr<Robot> &actor, const Eigen::Affine3d &transform);
+    
+    // File parsing
+    /**
+     * @brief Parse XML scene file to load robots
+     * @param filename Path to XML file
+     */
     void parseXML(const std::string &filename);
+    
+    /**
+     * @brief Parse URDF file to load robot
+     * @param filename Path to URDF file
+     */
+    void parseURDF(const std::string &filename);
+    
+    // Visualization
+    /**
+     * @brief Create Qt3D entities for all robots
+     * @param rootEntity Root entity to attach visualizations to
+     * @param showBBoxes Whether to show bounding boxes
+     */
     void createEntities(Qt3DCore::QEntity *rootEntity, bool showBBoxes);
+    
+    /**
+     * @brief Get mapping of robots to their Qt3D entities
+     * @return Map of robot to entity pointers
+     */
     std::unordered_map<std::shared_ptr<Robot>, QSharedPointer<Qt3DCore::QEntity>> getNodeEntities()
         const;
+        
+    /**
+     * @brief Update all robot visualizations
+     * @param showBoundingVolumes Whether to display bounding volumes
+     */
     void updateEntities(bool showBoundingVolumes);
+    
+    // Collision detection
+    /**
+     * @brief Get all obstacles transformed to world coordinates
+     * @return Vector of transformed obstacle pointers
+     */
     std::vector<std::shared_ptr<Obstacle>> getTransformedObstacles() const;
 
+    /**
+     * @brief Clear all robots and entities
+     */
     void clear();
-
-    void parseURDF(const std::string &filename);
 
 private:
     std::vector<std::shared_ptr<Robot>> _robots;

@@ -32,6 +32,7 @@ public:
 
     MotionGenerator *getMotionGenerator() const { return _motionGenerator; }
     PathPlanner *getPathPlanner() const { return _pathPlanner; }
+    std::shared_ptr<BVHTree> getObstacleTree() const { return _obstacleTree; }
 
     std::vector<Eigen::Affine3d> getScanPoses() const;
 

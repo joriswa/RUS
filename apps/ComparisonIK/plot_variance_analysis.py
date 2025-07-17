@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
 """
-Configuration Variance Analysis for IK Methods
+Configuration Variance Analysis for IK Methods - Original Format
 Analyzes how much joint angle solutions vary for the same pose across 100 runs per method.
 This measures solution consistency - do methods find similar or very different configurations?
+
+Creates:
+1. Overall variance boxplots comparing methods
+2. Per-joint variance boxplots (7 individual joint analyses)
 """
 
 import pandas as pd
@@ -17,15 +21,9 @@ warnings.filterwarnings('ignore', category=FutureWarning)
 
 def set_median_lines_black():
     """Helper function to set median lines to black color in boxplots."""
-    ax = plt.gca()
-    for patch in ax.artists:
-        # The median line is the 5th line (index 4) for each box
-        r, g, b, alpha = patch.get_facecolor()
-        patch.set_facecolor((r, g, b, alpha))
-    
-    # Set median line properties
-    for line in ax.lines:
-        if line.get_linestyle() == '-':  # Median lines are solid
+    plt.gca().tick_params(colors='black')
+    for line in plt.gca().lines:
+        if line.get_linestyle() == '-':  # median lines
             line.set_color('black')
 
 def load_and_filter_data(filename):
@@ -34,17 +32,15 @@ def load_and_filter_data(filename):
     
     print(f"📊 Total records loaded: {len(df)}")
     print(f"🔢 Unique poses: {df['pose_id'].nunique()}")
-    print(f"🔢 Unique runs per pose: {df['run_id'].nunique()}")
     print(f"🎯 Methods: {list(df['method'].unique())}")
     
-    # Filter for successful results only (for joint angle analysis)
+    # Filter for successful results only
     successful_df = df[df['success'] == True].copy()
     print(f"✅ Successful results: {len(successful_df)} ({len(successful_df)/len(df)*100:.1f}%)")
     
-    # Check if we have joint angle data
+    # Check for joint angle data
     joint_cols = ['q1', 'q2', 'q3', 'q4', 'q5', 'q6', 'q7']
     if all(col in successful_df.columns for col in joint_cols):
-        # Remove rows with NaN joint angles
         successful_df = successful_df.dropna(subset=joint_cols)
         print(f"📐 Results with valid joint angles: {len(successful_df)}")
     else:
@@ -101,44 +97,33 @@ def calculate_pose_consistency_metrics(successful_df):
             if len(pose_method_data) < 2:
                 continue
             
-            # Calculate total configuration variance (sum of all joint variances)
-            total_variance = 0
-            max_joint_variance = 0
+            # Calculate joint variances for this pose-method combination
             joint_variances = []
-            
             for joint_col in joint_cols:
-                joint_var = np.var(pose_method_data[joint_col].values, ddof=1)
-                joint_variances.append(joint_var)
-                total_variance += joint_var
-                max_joint_variance = max(max_joint_variance, joint_var)
+                joint_angles = pose_method_data[joint_col].values
+                joint_variances.append(np.var(joint_angles, ddof=1))
             
-            # Calculate Euclidean distance variance between configurations
-            configurations = pose_method_data[joint_cols].values
-            if len(configurations) > 1:
-                config_distances = []
-                mean_config = np.mean(configurations, axis=0)
-                for config in configurations:
-                    distance = np.linalg.norm(config - mean_config)
-                    config_distances.append(distance)
-                config_variance = np.var(config_distances, ddof=1)
-            else:
-                config_variance = 0
+            # Calculate configuration distance variance
+            joint_matrix = pose_method_data[joint_cols].values
+            mean_config = np.mean(joint_matrix, axis=0)
+            distances = [np.linalg.norm(config - mean_config) for config in joint_matrix]
             
             consistency_data.append({
                 'pose_id': pose_id,
                 'method': method,
-                'total_joint_variance': total_variance,
-                'max_joint_variance': max_joint_variance,
+                'total_joint_variance': np.sum(joint_variances),
                 'mean_joint_variance': np.mean(joint_variances),
-                'configuration_distance_variance': config_variance,
-                'n_samples': len(pose_method_data),
-                'success_rate': len(pose_method_data) / 100.0  # Assuming 100 runs per pose
+                'max_joint_variance': np.max(joint_variances),
+                'configuration_distance_variance': np.var(distances, ddof=1),
+                'mean_configuration_distance': np.mean(distances),
+                'success_rate': len(pose_method_data) / 100.0,  # Assuming 100 runs per pose
+                'n_successful': len(pose_method_data)
             })
     
     return pd.DataFrame(consistency_data)
 
 def create_variance_analysis_plots(variance_df, consistency_df):
-    """Create comprehensive variance analysis plots."""
+    """Create comprehensive variance analysis plots - Original Format."""
     # Set up the plot style
     plt.style.use('default')
     sns.set_palette("husl")
@@ -249,7 +234,7 @@ def create_variance_analysis_plots(variance_df, consistency_df):
     return fig
 
 def create_detailed_joint_analysis(variance_df):
-    """Create detailed per-joint variance analysis."""
+    """Create detailed per-joint variance analysis - Original Format."""
     fig, axes = plt.subplots(2, 4, figsize=(20, 10))
     axes = axes.flatten()
     
@@ -358,19 +343,19 @@ def print_statistical_summary(variance_df, consistency_df):
 
 def main():
     """Main analysis function."""
-    print("🔍 Configuration Variance Analysis for IK Methods")
-    print("=" * 60)
+    print("🔍 Configuration Variance Analysis for IK Methods - Original Format")
+    print("=" * 70)
     
     # Load data
     try:
-        full_df, successful_df = load_and_filter_data('two_method_comparison_results.csv')
+        full_df, successful_df = load_and_filter_data('three_method_comparison_results.csv')
         
         if successful_df is None or len(successful_df) == 0:
             print("❌ No successful results with joint angles found. Cannot perform variance analysis.")
             return
             
     except FileNotFoundError:
-        print("❌ Error: Could not find 'two_method_comparison_results.csv'")
+        print("❌ Error: Could not find 'three_method_comparison_results.csv'")
         print("   Please run the C++ comparison script first to generate the data.")
         return
     except Exception as e:

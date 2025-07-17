@@ -12,14 +12,17 @@ void RobotArm::parseURDF(const std::string &urdf_file)
     read_xml(urdf_file, pt);
     std::unordered_map<std::string, std::shared_ptr<Link>> link_map;
 
+    // Parse all link elements from URDF
     for (const auto &link_node : pt.get_child("robot")) {
         if (link_node.first == "link") {
+            // Skip world link (not part of robot structure)
             if (link_node.second.get<std::string>("<xmlattr>.name") == "world")
                 continue;
 
             auto robot_link = std::make_shared<Link>();
             robot_link->name = link_node.second.get<std::string>("<xmlattr>.name");
 
+            // Parse visual properties (mesh file and transform)
             auto visual = link_node.second.get_child_optional("visual");
             if (visual) {
                 auto geometry = visual->get_child_optional("geometry");
@@ -31,6 +34,7 @@ void RobotArm::parseURDF(const std::string &urdf_file)
                 }
                 auto origin = visual->get_child_optional("origin");
                 if (origin) {
+                    // Parse translation (xyz) and rotation (rpy) from origin
                     std::istringstream(origin->get<std::string>("<xmlattr>.xyz", "0 0 0"))
                         >> robot_link->translation.x() >> robot_link->translation.y()
                         >> robot_link->translation.z();
@@ -837,7 +841,7 @@ void RobotArm::drawLinkedBoundingBoxes(Qt3DCore::QEntity* rootEntity) {
     }
 }
 
-double RobotArm::computeManipulability()
+double RobotArm::computeManipulability() const
 {
     double product = 1.0;
     int num_joints = _joints.size();

@@ -41,7 +41,13 @@ const double kRRG = 2.71828 * (1 + 1.0 / 7.0);
 /**
  * @brief Enum representing different path planning algorithms.
  */
-enum Algorithm { RRT, RRTStar, InformedRRTStar, RRTConnect };
+enum Algorithm
+{
+    RRT,
+    RRTStar,
+    InformedRRTStar,
+    RRTConnect
+};
 
 /**
  * @brief Structure to hold parameters for path planning.
@@ -91,7 +97,7 @@ public:
 
     /**
      * @brief Estimates the total cost for this node.
-     * @return The estimated total cost.
+     * @return The estimated total cost (cost + cost to goal).
      */
     double estimateCost();
 };
@@ -130,38 +136,43 @@ private:
     bool motionIsValid(RobotArm &armA, RobotArm &endArm, bool inflate = false);
 
     /**
-     * @brief Performs the RRT algorithm.
+     * @brief Performs the RRT (Rapidly-exploring Random Tree) algorithm.
+     * @return True if a path to the goal was found, false otherwise.
      */
     bool performRRT();
 
     /**
-     * @brief Performs the RRT-Connect algorithm.
+     * @brief Performs the RRT-Connect algorithm for bidirectional tree growth.
      * @return True if a path was found, false otherwise.
      */
     bool performRRTConnect();
 
     /**
-     * @brief Performs the RRT* algorithm.
+     * @brief Performs the RRT* algorithm with asymptotic optimality guarantees.
+     * @param costTrackingFile Optional file path to save cost tracking data.
+     * @return True if a path was found, false otherwise.
      */
     bool performRRTStar(const std::string &costTrackingFile = "");
 
     /**
-     * @brief Performs the Informed RRT* algorithm.
+     * @brief Performs the Informed RRT* algorithm with ellipsoidal sampling.
+     * @param costTrackingFile Optional file path to save cost tracking data.
+     * @return True if a path was found, false otherwise.
      */
     bool performInformedRRTStar(const std::string &costTrackingFile = "");
 
     /**
-     * @brief Finds the nearest node in joint space.
-     * @param point The point to find the nearest node to.
-     * @return The nearest node.
+     * @brief Finds the nearest node in joint space to a given point.
+     * @param point The target point in configuration space.
+     * @return Pointer to the nearest node in the tree.
      */
     NodePtr nearestJointNode(const State &point);
 
     /**
-     * @brief Generates a new node in joint space.
-     * @param randomPoint The random point to extend towards.
-     * @param newNode The new node generated.
-     * @return True if a new node was successfully generated, false otherwise.
+     * @brief Generates a new node by extending towards a random point in joint space.
+     * @param randomPoint The random point to extend towards (modified in-place).
+     * @param newNode Reference to store the generated new node.
+     * @return True if a valid new node was generated, false otherwise.
      */
     bool getNewJointNode(State &randomPoint, NodePtr &newNode);
 
@@ -182,70 +193,70 @@ private:
     std::vector<NodePtr> rewirePath(NodePtr newNode, std::vector<NodePtr> &neighboringNodes);
 
     /**
-     * @brief Checks if an arm configuration is close to the goal.
+     * @brief Checks if an arm configuration is sufficiently close to the goal.
      * @param arm The arm configuration to check.
-     * @return True if the arm is close to the goal, false otherwise.
+     * @return True if the arm is close enough to the goal, false otherwise.
      */
     bool closeToGoal(RobotArm arm);
 
     /**
-     * @brief Gets the sampling matrix for informed sampling.
+     * @brief Computes the sampling transformation matrix for informed sampling.
      * @param cBest The best cost found so far.
-     * @return The sampling matrix.
+     * @return The transformation matrix for ellipsoidal sampling.
      */
     Eigen::MatrixXd getSamplingMatrix(double cBest);
 
     /**
-     * @brief Samples a point from a unit ball.
-     * @return A vector representing a point in the unit ball.
+     * @brief Samples a point uniformly from a unit ball in high-dimensional space.
+     * @return A vector representing a point sampled from the unit ball.
      */
     Eigen::VectorXd sampleUnitBall();
 
     /**
-     * @brief Samples a point within an ellipsoid.
-     * @param cmax The maximum cost.
-     * @param C The transformation matrix for the ellipsoid.
+     * @brief Samples a point within an ellipsoid for informed RRT*.
+     * @param cmax The maximum cost defining the ellipsoid size.
+     * @param C The transformation matrix for the ellipsoid orientation.
      * @return A state sampled from within the ellipsoid.
      */
     State sampleWithinEllipsoid(double cmax, Eigen::MatrixXd C);
 
     /**
-     * @brief Computes the rotation matrix in the world frame.
+     * @brief Computes the rotation matrix for world frame transformation.
      * @param start The start state.
      * @param goal The goal state.
-     * @return The rotation matrix.
+     * @return The rotation matrix aligning start and goal directions.
      */
     Eigen::MatrixXd computeRotationWorldFrame(const State &start, const State &goal);
 
     /**
-     * @brief Computes the metric distance between two states.
+     * @brief Computes the Euclidean distance metric between two states.
      * @param a The first state.
      * @param b The second state.
-     * @return The metric distance between the states.
+     * @return The Euclidean distance between the states in configuration space.
      */
     double metric(const State &a, const State &b);
 
     /**
-     * @brief Constructs the final path from the start node to the goal node.
-     * @param startNode The start node.
-     * @param goalNode The goal node.
+     * @brief Constructs the final path by backtracking from goal to start.
+     * @param startNode The start node of the path.
+     * @param goalNode The goal node of the path.
      */
     void constructPath(NodePtr startNode, NodePtr goalNode);
 
     /**
-     * @brief Finds the nearest neighbor in the tree.
-     * @param tree The tree to search.
-     * @param point The point to find the nearest neighbor to.
-     * @return The nearest neighbor node.
+     * @brief Finds the nearest neighbor node in a given tree.
+     * @param tree The R-tree to search in.
+     * @param point The query point.
+     * @return Pointer to the nearest neighbor node.
      */
     NodePtr nearestNeighbor(const bgi::rtree<std::pair<State, NodePtr>, bgi::rstar<16>> &tree,
                             const State &point);
 
     /**
-     * @brief Extends the tree towards a target point.
+     * @brief Extends a tree towards a target point by creating a new node.
      * @param tree The tree to extend.
      * @param target The target point to extend towards.
-     * @param newNode The new node created by the extension.
+     * @param newNode Reference to store the newly created node.
      * @return True if the extension was successful, false otherwise.
      */
     bool extendTree(bgi::rtree<std::pair<State, NodePtr>, bgi::rstar<16>> &tree,
@@ -253,57 +264,39 @@ private:
                     NodePtr &newNode);
 
     /**
-     * @brief Generates a new node in the tree.
-     * @param randomPoint The random point to extend towards.
-     * @param newNode The new node generated.
-     * @param tree The tree to extend.
-     * @return True if a new node was successfully generated, false otherwise.
+     * @brief Generates a new node by extending from the nearest node towards a random point.
+     * @param randomPoint The random point to extend towards (modified in-place).
+     * @param newNode Reference to store the generated new node.
+     * @param tree The tree containing existing nodes.
+     * @return True if a valid new node was generated, false otherwise.
      */
     bool getNewNode(State &randomPoint,
                     NodePtr &newNode,
                     const bgi::rtree<std::pair<State, NodePtr>, bgi::rstar<16>> &tree);
 
     /**
-     * @brief Connects the path with straight lines.
+     * @brief Connects path waypoints with densely sampled straight-line segments.
      */
     void connectWithStraightLines();
 
     /**
-     * @brief Computes the total joint distance of the current path.
-     * @return The total joint distance.
-     */
-    double computeTotalJointDistance() const;
-
-    /**
-     * @brief Computes the total jerk of the current path.
-     * @return The total jerk.
-     */
-    double computeTotalJerk() const;
-
-    /**
-     * @brief Computes the total displacement of the current path.
-     * @return The total displacement.
+     * @brief Computes the total displacement along the current path.
+     * @return The total displacement in meters.
      */
     double computeTotalDisplacement();
 
     /**
-     * @brief Computes the total distance to the environment of the current path.
-     * @return The total distance to the environment.
+     * @brief Computes the total distance to environment obstacles along the path.
+     * @return The cumulative distance to obstacles.
      */
     double computeTotalDistanceToEnviornment();
 
     /**
-     * @brief Performs the RRT*-Connect algorithm.
-     * @return True if a path was found, false otherwise.
-     */
-    bool performRRTStarConnect();
-
-    /**
-     * @brief Finds the k-nearest neighbors in the tree.
-     * @param tree The tree to search.
-     * @param node The node to find neighbors for.
+     * @brief Finds the k-nearest neighbors of a node in the tree.
+     * @param tree The R-tree to search in.
+     * @param node The query node.
      * @param k The number of neighbors to find.
-     * @return A vector of the k-nearest neighbors.
+     * @return Vector of k-nearest neighbor nodes.
      */
     std::vector<NodePtr> findNearestNeighbors(
         bgi::rtree<std::pair<State, NodePtr>, bgi::rstar<16>> &tree,
@@ -312,8 +305,7 @@ private:
 
 public:
     /**
-     * @brief Constructs a PathPlanner object.
-     * @param worker The QThread to be used for path planning operations.
+     * @brief Default constructor for PathPlanner.
      */
     PathPlanner();
 
@@ -328,14 +320,15 @@ public:
     /**
      * @brief Structure to hold clearance metrics for a robot arm configuration.
      */
-    struct ClearanceMetrics {
-        double min_clearance = std::numeric_limits<double>::infinity();     ///< Minimum distance to any obstacle
-        double avg_clearance = 0.0;                                         ///< Average clearance across all links
-        double weighted_clearance = 0.0;                                    ///< Volume-weighted clearance
-        std::vector<double> link_clearances;                                ///< Individual clearance for each link
-        std::vector<Vec3> closest_points;                                   ///< Closest points on obstacles for each link
-        bool has_collision = false;                                         ///< Whether any link is in collision
-        int num_links_checked = 0;                                          ///< Number of links that were checked
+    struct ClearanceMetrics
+    {
+        double min_clearance = std::numeric_limits<double>::infinity(); ///< Minimum distance to any obstacle
+        double avg_clearance = 0.0;                                     ///< Average clearance across all links
+        double weighted_clearance = 0.0;                                ///< Volume-weighted clearance
+        std::vector<double> link_clearances;                            ///< Individual clearance for each link
+        std::vector<Vec3> closest_points;                               ///< Closest points on obstacles for each link
+        bool has_collision = false;                                     ///< Whether any link is in collision
+        int num_links_checked = 0;                                      ///< Number of links that were checked
     };
 
     /**
@@ -369,130 +362,146 @@ public:
 
     /**
      * @brief Sets the algorithm to be used for path planning.
-     * @param algorithm The chosen algorithm.
+     * @param algorithm The chosen path planning algorithm.
      */
     void setAlgorithm(Algorithm algorithm);
 
     /**
-     * @brief Gets the obstacle tree.
-     * @return A shared pointer to the BVHTree representing obstacles.
+     * @brief Gets the obstacle tree used for collision detection.
+     * @return Shared pointer to the BVHTree representing obstacles.
      */
     std::shared_ptr<BVHTree> obstacleTree() const;
 
     /**
-     * @brief Sets the obstacle tree.
-     * @param newObstacleTree The new obstacle tree.
+     * @brief Sets the obstacle tree for collision detection.
+     * @param newObstacleTree The new BVHTree containing obstacle geometry.
      */
     void setObstacleTree(const std::shared_ptr<BVHTree> &newObstacleTree);
 
     /**
-     * @brief Gets the computed path.
-     * @return A vector of tuples containing states and arm configurations.
+     * @brief Gets the computed path as end-effector positions and arm configurations.
+     * @return Vector of tuples containing 3D positions and robot arm states.
      */
     std::vector<std::tuple<Vec3, RobotArm>> getPath();
 
     /**
-     * @brief Selects a goal pose for the robot arm.
-     * @param pose The target pose.
-     * @return The selected robot arm configuration.
+     * @brief Selects an optimal goal pose using optimization techniques.
+     * @param pose The target end-effector pose.
+     * @return Pair containing the selected robot arm configuration and success status.
      */
     std::pair<RobotArm, bool> selectGoalPose(const Eigen::Affine3d &pose);
 
     /**
-     * @brief Selects a goal pose using simulated annealing optimization.
-     * @param pose The target pose.
-     * @return A pair containing the selected robot arm configuration and success status.
+     * @brief Selects a goal pose using simulated annealing optimization with default parameters.
+     * @param pose The target end-effector pose.
+     * @return Pair containing the selected robot arm configuration and success status.
      */
-    std::pair<RobotArm, bool> selectGoalPoseSimulatedAnnealing(const Eigen::Affine3d &pose);
+    std::pair<RobotArm, bool> selectGoalPoseSimulatedAnnealing(
+        const Eigen::Affine3d &pose,
+        double T_max = 50.0,          // Higher initial temperature for better exploration
+        double T_min = 0.0001,        // Lower final temperature for finer convergence
+        double alpha = 0.995,         // Slower cooling rate for more thorough search
+        int max_iterations = 100000,  // More iterations for comprehensive optimization
+        int max_no_improvement = 5000 // Higher patience for better convergence
+    );
 
     /**
-     * @brief Selects a goal pose using simulated annealing optimization with custom parameters.
-     * @param pose The target pose.
-     * @param T_max Initial temperature.
-     * @param T_min Final temperature.
-     * @param alpha Cooling rate.
-     * @param max_iterations Maximum number of iterations.
-     * @param max_no_improvement Maximum iterations without improvement before early termination.
-     * @return A pair containing the selected robot arm configuration and success status.
-     */
-    std::pair<RobotArm, bool> selectGoalPoseSimulatedAnnealing(const Eigen::Affine3d &pose,
-                                                               double T_max, 
-                                                               double T_min, 
-                                                               double alpha, 
-                                                               int max_iterations, 
-                                                               int max_no_improvement);
-
-    /**
-     * @brief Saves the joint angles of the path to a file.
-     * @param filename The name of the file to save to.
+     * @brief Saves the joint angles of the computed path to a CSV file.
+     * @param filename The path to the output file.
      */
     void saveJointAnglesToFile(const std::string &filename);
 
     /**
-     * @brief Gets the path as a matrix of joint angles.
-     * @return An Eigen::MatrixXd containing the joint angles for each step in the path.
+     * @brief Gets the path as a matrix of joint angles for each waypoint.
+     * @return Eigen matrix where each row represents joint angles at a waypoint.
      */
     Eigen::MatrixXd getAnglesPath() const;
 
     /**
-     * @brief Sets the parameters for path planning.
-     * @param newParams The new parameters to use.
+     * @brief Sets the path planning parameters.
+     * @param newParams The new parameter configuration.
      */
     void setParams(const Params &newParams);
 
+    /**
+     * @brief Executes the configured path planning algorithm.
+     * @return True if a valid path was found, false otherwise.
+     */
     bool runPathFinding();
+
+    /**
+     * @brief Sets a specific goal configuration instead of pose-based planning.
+     * @param arm The target robot arm configuration.
+     */
     void setGoalConfiguration(RobotArm arm);
 
     /**
      * @brief Plans checkpoints and trajectory segments for ultrasound scanning
-     * 
+     *
      * This function computes robot arm configurations for scan positions and automatically
      * segments them into valid trajectory parts based on boundary detection and angle deviations.
      * It performs the complete high-level path planning including finding valid configurations,
      * detecting boundaries, and organizing segments for trajectory generation.
-     * 
+     *
      * @param scanPoses A vector of Eigen::Affine3d poses representing the scan checkpoints
      * @param currentJoints Current joint configuration to start from
      * @return A structure containing checkpoints, valid segments, and jump pairs
      */
-    struct CheckpointPlanResult {
+    struct CheckpointPlanResult
+    {
         std::vector<std::pair<RobotArm, bool>> checkpoints;
         std::vector<std::pair<size_t, size_t>> validSegments;
         std::vector<std::pair<size_t, size_t>> jumpPairs;
         size_t firstValidIndex;
     };
-    
+
     CheckpointPlanResult planCheckpoints(
         const std::vector<Eigen::Affine3d> &scanPoses,
         const Eigen::VectorXd &currentJoints);
 
 private:
     /**
-     * @brief Densifies sparse task space poses through interpolation
+     * @brief Densifies sparse task space poses through linear interpolation.
+     * @param originalPoses The original sparse set of poses.
+     * @return Vector of densified poses with intermediate waypoints.
      */
     std::vector<Eigen::Affine3d> densifyTaskSpacePath(
         const std::vector<Eigen::Affine3d> &originalPoses);
-    
+
     /**
-     * @brief Solves inverse kinematics for densified poses with continuity optimization
+     * @brief Solves inverse kinematics for densified poses with continuity optimization.
+     * @param densifiedPoses The densified poses to solve IK for.
+     * @param currentJoints Current joint configuration as starting point.
+     * @param result Reference to store the planning results.
+     * @param selectGoalPoseFallbacks Vector to track fallback usage.
      */
     void solveInverseKinematics(
         const std::vector<Eigen::Affine3d> &densifiedPoses,
         const Eigen::VectorXd &currentJoints,
         CheckpointPlanResult &result,
         std::vector<size_t> &selectGoalPoseFallbacks);
-    
+
     /**
-     * @brief Attempts continuous IK solving using small variations
+     * @brief Attempts continuous IK solving using small joint variations.
+     * @param targetMatrix The target transformation matrix.
+     * @param currentJointAngles Current joint configuration.
+     * @param gen Random number generator.
+     * @param dis Random distribution for sampling.
+     * @return Pair containing the IK solution and success status.
      */
     std::pair<std::array<double, 7>, bool> attemptContinuousIK(
         const Eigen::Matrix<double, 4, 4> &targetMatrix,
         const std::array<double, 7> &currentJointAngles,
         std::mt19937 &gen,
         std::uniform_real_distribution<> &dis);
-    
+
     /**
-     * @brief Handles IK fallback when continuous solving fails
+     * @brief Handles IK fallback when continuous solving fails.
+     * @param pose The target pose requiring fallback.
+     * @param poseIdx Index of the pose in the sequence.
+     * @param currentJointAngles Current joint configuration (modified).
+     * @param result Reference to store the planning results.
+     * @param selectGoalPoseFallbacks Vector to track fallback usage.
      */
     void handleIKFallback(
         const Eigen::Affine3d &pose,
@@ -500,41 +509,42 @@ private:
         std::array<double, 7> &currentJointAngles,
         CheckpointPlanResult &result,
         std::vector<size_t> &selectGoalPoseFallbacks);
-    
+
     /**
-     * @brief Segments the path into continuous trajectory pieces and jump pairs
+     * @brief Segments the path into continuous trajectory pieces and jump pairs.
+     * @param result Reference to store the segmentation results.
+     * @param selectGoalPoseFallbacks Vector indicating which poses used fallbacks.
      */
     void segmentPath(
         CheckpointPlanResult &result,
         const std::vector<size_t> &selectGoalPoseFallbacks);
 
-    /**
-     * @brief Builds valid segments from checkpoints and repositioning indices
-     */
-    void buildValidSegments(CheckpointPlanResult& result, 
-                           const std::vector<size_t>& repositioningIndices);
-
 public:
     /**
-     * @brief Generates a smooth trajectory from a set of timed checkpoints
-     * 
+     * @brief Generates a smooth trajectory from timed checkpoints using spline interpolation.
+     *
      * This function uses cubic spline interpolation to create a smooth trajectory that
      * passes through the given checkpoints at their specified times. It creates intermediate
-     * points at regular time intervals for continuous motion.
-     * 
-     * @param checkpointsWithTimings A vector of pairs containing RobotArm configurations and timestamps
-     * @param timeStep The desired time step between interpolated points in seconds
-     * @return A vector of pairs containing interpolated RobotArm configurations and timestamps
+     * points at regular time intervals for continuous motion control.
+     *
+     * @param checkpointsWithTimings Vector of pairs containing RobotArm configurations and timestamps.
+     * @param timeStep The desired time step between interpolated points in seconds.
+     * @return Vector of pairs containing interpolated RobotArm configurations and timestamps.
      */
     std::vector<std::pair<RobotArm, double>> generateSmoothTrajectory(
         const std::vector<std::pair<RobotArm, double>> &checkpointsWithTimings, double timeStep);
+
+    /**
+     * @brief Gets the current robot arm configuration.
+     * @return The current RobotArm instance.
+     */
     RobotArm getArm();
 
     /**
      * @brief Evaluates the cost function used in selectGoalPose for a specific free angle and pose.
      * @param pose The target pose.
      * @param q7 The free angle (7th joint) to use for IK computation.
-     * @return A pair containing the computed cost value and success status. 
+     * @return A pair containing the computed cost value and success status.
      *         Returns {cost, true} if IK solution is found and valid (no collision),
      *         Returns {std::numeric_limits<double>::infinity(), false} if no valid solution.
      */

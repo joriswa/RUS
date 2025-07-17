@@ -10,22 +10,27 @@ void readSTLFile(const QString& filename, std::vector<QVector3D>& vertices, std:
         return;
     }
 
+    // Skip 80-byte header (not used in binary STL)
     char header[80];
     file.read(header, 80);
 
+    // Read number of triangles
     unsigned int numTriangles;
     file.read(reinterpret_cast<char*>(&numTriangles), sizeof(numTriangles));
 
     vertices.reserve(numTriangles * 3);
     normals.reserve(numTriangles);
 
+    // Process each triangle - binary STL format stores: normal vector + 3 vertices + attribute count
     for (unsigned int i = 0; i < numTriangles; ++i) {
         QVector3D normal, vertex1, vertex2, vertex3;
 
+        // Read normal vector (3 floats)
         file.read(reinterpret_cast<char*>(&normal[0]), sizeof(float));
         file.read(reinterpret_cast<char*>(&normal[1]), sizeof(float));
         file.read(reinterpret_cast<char*>(&normal[2]), sizeof(float));
 
+        // Read triangle vertices (3 vertices × 3 floats each)
         file.read(reinterpret_cast<char*>(&vertex1[0]), sizeof(float));
         file.read(reinterpret_cast<char*>(&vertex1[1]), sizeof(float));
         file.read(reinterpret_cast<char*>(&vertex1[2]), sizeof(float));
@@ -42,10 +47,12 @@ void readSTLFile(const QString& filename, std::vector<QVector3D>& vertices, std:
         vertices.push_back(vertex2);
         vertices.push_back(vertex3);
 
+        // Store normal for each vertex of the triangle
         normals.push_back(normal);
         normals.push_back(normal);
         normals.push_back(normal);
 
+        // Skip attribute byte count (usually 0)
         quint16 attributeByteCount;
         file.read(reinterpret_cast<char*>(&attributeByteCount), sizeof(attributeByteCount));
     }
@@ -69,10 +76,12 @@ Qt3DCore::QGeometry* loadSTL(const QString& filename)
     QByteArray indexData;
     QByteArray normalData;
 
+    // Convert vertices to byte array for GPU buffer
     for (const auto& vertex : vertices) {
         vertexData.append(reinterpret_cast<const char*>(&vertex), sizeof(QVector3D));
     }
 
+    // Generate sequential indices for all vertices
     for (unsigned int i = 0; i < vertices.size(); ++i) {
         indexData.append(reinterpret_cast<const char*>(&i), sizeof(unsigned int));
     }
@@ -152,6 +161,7 @@ bool loadSTLFile(const QString &fileName, QVector<QVector3D> &vertices) {
 }
 
 void findMinMaxVertices(const QVector<QVector3D> &vertices, Eigen::Vector3d &minVertex, Eigen::Vector3d &maxVertex) {
+    // Initialize with extreme values for proper min/max comparison
     minVertex = Eigen::Vector3d(std::numeric_limits<float>::max(),
                                 std::numeric_limits<float>::max(),
                                 std::numeric_limits<float>::max());
@@ -159,6 +169,7 @@ void findMinMaxVertices(const QVector<QVector3D> &vertices, Eigen::Vector3d &min
                                 std::numeric_limits<float>::lowest(),
                                 std::numeric_limits<float>::lowest());
 
+    // Find component-wise minimum and maximum across all vertices
     for (const QVector3D &vertex : vertices) {
         minVertex.x() = std::min(minVertex.x(), static_cast<double>(vertex.x()));
         minVertex.y() = std::min(minVertex.y(), static_cast<double>(vertex.y()));
@@ -174,13 +185,16 @@ QMatrix4x4 convertEigenAffine3dToQMatrix4x4(const Eigen::Affine3d& transform) {
     QMatrix4x4 matrix;
     matrix.setToIdentity();
 
+    // Copy rotation matrix (3x3) to upper-left of 4x4 matrix
     for (int i = 0; i < 3; ++i) {
         for (int j = 0; j < 3; ++j) {
             matrix(i, j) = transform.rotation()(i, j);
         }
+        // Copy translation vector to last column
         matrix(i, 3) = transform.translation()(i);
     }
 
+    // Ensure homogeneous coordinate is 1
     matrix(3, 3) = 1.0;
 
     return matrix;

@@ -1,7 +1,7 @@
 #ifndef MATH_H
 #define MATH_H
 
-#include "math.h"
+#include <cmath>
 #include <stdlib.h>
 #include <vector>
 

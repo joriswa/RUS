@@ -1,22 +1,84 @@
 # ComparisonIK - Inverse Kinematics Method Comparison
 
+This directory contains a clean, focused implementation for comparing three inverse kinematics methods for the Franka Panda robot.
+
+## Overview
+
+The ComparisonIK module provides:
+1. **Three-method comparison**: Newton-Raphson vs SA-Optimized vs Grid-Search IK solvers
+2. **Shared cost functions**: Fair comparison using identical cost calculations
+3. **Professional visualization**: Grey-styled plots with AAAAA/CCCCC color scheme
+
+## File Structure
+
+```
+ComparisonIK/
+├── core/                          # Core IK implementations
+│   ├── newton_raphson_ik.h/cpp   # Newton-Raphson solver
+│   ├── grid_search_ik.h/cpp      # Grid search solver  
+│   └── ik_cost_functions.h/cpp   # Shared cost functions
+├── comparison_methods/            # Analysis & plotting scripts
+│   ├── master_plot_generator.py  # Main plotting script
+│   └── plot_*.py                 # Specific analysis scripts
+├── three_method_comparison.cpp   # Main comparison executable
+├── run_complete_analysis.sh      # Complete workflow script
+└── README.md                     # This file
+```
+
+## Usage
+
+### Quick Start
+```bash
+# Run complete analysis pipeline
+./run_complete_analysis.sh
+```
+
+### Manual Steps
+```bash
+# 1. Build
+make ThreeMethodComparison
+
+# 2. Run comparison 
+./ThreeMethodComparison
+
+# 3. Generate plots
+cd comparison_methods
+python3 master_plot_generator.py
+```
+
+## Key Features
+
+- **Fair comparison**: All methods use identical cost functions from `core/ik_cost_functions.cpp`
+- **Professional plots**: Consistent grey styling (AAAAA, CCCCC, 888888)
+- **Comprehensive analysis**: Success rates, execution time, clearance, joint limits
+- **Real robot data**: Uses actual Franka Panda poses from ultrasound scanning
+
+## Results
+
+The analysis generates:
+- `three_method_comparison_results.csv` - Raw numerical data
+- Professional plots in `comparison_methods/plots/` directory
+- Console output with key findings and statisticsverse Kinematics Method Comparison
+
 This directory contains a clean, focused implementation for comparing different inverse kinematics methods for the Franka Panda robot, along with cost function analysis and visualization tools.
 
 ## Overview
 
 The ComparisonIK module provides:
-1. **Two-method comparison**: Newton-Raphson vs SA-Optimized IK solvers
+1. **Three-method comparison**: Newton-Raphson, SA-Optimized, and Grid Search IK solvers
 2. **Cost function analysis**: Underlying cost function landscape visualization
 3. **Python analysis tools**: Comprehensive plotting and statistical analysis
 
 ## Essential Components
 
 ### C++ Executables
-- **`TwoMethodComparison`**: Main comparison between Newton-Raphson and SA-Optimized IK methods
+- **`ThreeMethodComparison`**: Main comparison between Newton-Raphson, SA-Optimized, and Grid Search IK methods
 - **`UnderlyingCostFunctionGenerator`**: Generates actual PathPlanner cost function data across different q7 values and poses
 
 ### Core IK Implementation
 - `core/newton_raphson_ik.cpp`: Newton-Raphson IK solver implementation
+- `core/grid_search_ik.cpp`: Grid search IK solver implementation  
+- `core/ik_cost_functions.cpp`: Shared cost functions for fair comparison
 
 ### Python Analysis Tools
 - `generate_complete_analysis.py`: Comprehensive analysis with statistical summaries

@@ -10,10 +10,6 @@
 #include <boost/property_tree/xml_parser.hpp>
 #include <sstream>
 
-// void RobotManager::addActor(std::shared_ptr<Robot> actor) {
-//     _robots.push_back(actor);
-// }
-
 void RobotManager::removeRobot(const std::shared_ptr<Robot> &actor)
 {
     _robots.erase(std::remove(_robots.begin(), _robots.end(), actor), _robots.end());
@@ -33,24 +29,6 @@ void RobotManager::transformRobots(const std::shared_ptr<Robot> &actor,
     actor->setFixedTransform(transform);
 }
 
-// Eigen::Affine3d RobotManager::parseTransform(const boost::property_tree::ptree& node) {
-//     Eigen::Affine3d transform = Eigen::Affine3d::Identity();
-//     if (auto transform_node = node.get_child_optional("transform")) {
-//         auto xyz = transform_node->get<std::string>("<xmlattr>.xyz");
-//         auto rpy = transform_node->get<std::string>("<xmlattr>.rpy");
-//         std::istringstream xyz_stream(xyz);
-//         std::istringstream rpy_stream(rpy);
-//         Eigen::Vector3d translation, rotation;
-//         xyz_stream >> translation.x() >> translation.y() >> translation.z();
-//         rpy_stream >> rotation.x() >> rotation.y() >> rotation.z();
-//         transform.translation() = translation;
-//         transform.linear() = (Eigen::AngleAxisd(rotation.x(), Eigen::Vector3d::UnitX()) *
-//                               Eigen::AngleAxisd(rotation.y(), Eigen::Vector3d::UnitY()) *
-//                               Eigen::AngleAxisd(rotation.z(), Eigen::Vector3d::UnitZ())).toRotationMatrix();
-//     }
-//     return transform;
-// }
-
 Eigen::Vector3d RobotManager::parseScale(const boost::property_tree::ptree &node)
 {
     Eigen::Vector3d scale(1, 1, 1);
@@ -68,14 +46,17 @@ std::shared_ptr<Obstacle> RobotManager::parseObstacle(const std::string &type,
     Eigen::Affine3d transform = Eigen::Affine3d::Identity();
     Eigen::Vector3d scale = Eigen::Vector3d::Ones();
 
+    // Parse transformation if specified
     if (auto transform_node = node.get_child_optional("transform")) {
         transform = parseTransform(node);
     }
 
+    // Parse scale if specified
     if (auto scale_node = node.get_child_optional("scale")) {
         scale = parseScale(node);
     }
 
+    // Create obstacle based on type
     if (type == "box") {
         return std::make_shared<BoxObstacle>(scale, transform);
     }

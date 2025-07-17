@@ -54,11 +54,11 @@ set_target_properties(TinyURDFParser::TinyURDFParser PROPERTIES
   INTERFACE_LINK_LIBRARIES "Eigen3::Eigen;orocos-kdl"
 )
 
-# Import target "TinyURDFParser::TinyURDFParser" for configuration ""
-set_property(TARGET TinyURDFParser::TinyURDFParser APPEND PROPERTY IMPORTED_CONFIGURATIONS NOCONFIG)
+# Import target "TinyURDFParser::TinyURDFParser" for configuration "Release"
+set_property(TARGET TinyURDFParser::TinyURDFParser APPEND PROPERTY IMPORTED_CONFIGURATIONS RELEASE)
 set_target_properties(TinyURDFParser::TinyURDFParser PROPERTIES
-  IMPORTED_LINK_INTERFACE_LANGUAGES_NOCONFIG "CXX"
-  IMPORTED_LOCATION_NOCONFIG "/Users/joris/Uni/MA/Code/PathPlanner_US_wip/tinyurdfparser/libTinyURDFParser.a"
+  IMPORTED_LINK_INTERFACE_LANGUAGES_RELEASE "CXX"
+  IMPORTED_LOCATION_RELEASE "/Users/joris/Uni/MA/Code/PathPlanner_US_wip/tinyurdfparser/libTinyURDFParser.a"
   )
 
 # This file does not depend on other imported targets which have

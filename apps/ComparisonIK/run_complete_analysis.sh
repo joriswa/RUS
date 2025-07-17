@@ -4,7 +4,7 @@
 # ComparisonIK Complete Analysis Pipeline
 # =============================================================================
 # This script provides a one-command solution to:
-# 1. Build the C++ TwoMethodComparison executable
+# 1. Build the C++ ThreeMethodComparison executable
 # 2. Run the comparison to generate data
 # 3. Execute all Python analysis scripts
 # 4. Generate comprehensive visualizations
@@ -77,21 +77,21 @@ if ! cmake ..; then
     exit 1
 fi
 
-# Build the specific target
-print_step "Building TwoMethodComparison executable"
-if ! make TwoMethodComparison -j$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4); then
+# Build the entire project (which includes ThreeMethodComparison)
+print_step "Building project with ThreeMethodComparison executable"
+if ! make -j$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4); then
     print_error "Build failed!"
     exit 1
 fi
 
 # Check if executable was created
-EXECUTABLE_PATH="$BUILD_DIR/apps/ComparisonIK/TwoMethodComparison"
+EXECUTABLE_PATH="$BUILD_DIR/apps/ComparisonIK/ThreeMethodComparison"
 if [ ! -f "$EXECUTABLE_PATH" ]; then
     print_error "Executable not found at: $EXECUTABLE_PATH"
     exit 1
 fi
 
-print_success "TwoMethodComparison executable built successfully"
+print_success "ThreeMethodComparison executable built successfully"
 
 # =============================================================================
 # STEP 2: RUN C++ COMPARISON
@@ -100,18 +100,18 @@ print_header "STEP 2: RUNNING IK METHODS COMPARISON"
 
 cd "$SCRIPT_DIR"
 
-print_step "Executing TwoMethodComparison"
-echo -e "📊 This will test both Newton-Raphson and SA-Optimized methods"
-echo -e "📊 Results will be saved to: two_method_comparison_results.csv"
+print_step "Executing ThreeMethodComparison"
+echo -e "📊 This will test Newton-Raphson, SA-Optimized, and Grid Search methods"
+echo -e "📊 Results will be saved to: three_method_comparison_results.csv"
 
 # Run the executable and capture output
 if ! "$EXECUTABLE_PATH"; then
-    print_error "TwoMethodComparison execution failed!"
+    print_error "ThreeMethodComparison execution failed!"
     exit 1
 fi
 
 # Check if results file was generated
-if [ ! -f "$SCRIPT_DIR/two_method_comparison_results.csv" ]; then
+if [ ! -f "$SCRIPT_DIR/three_method_comparison_results.csv" ]; then
     print_error "Results CSV file was not generated!"
     exit 1
 fi
@@ -119,7 +119,7 @@ fi
 print_success "Comparison completed - data generated successfully"
 
 # Show quick data summary
-TOTAL_ROWS=$(wc -l < "$SCRIPT_DIR/two_method_comparison_results.csv")
+TOTAL_ROWS=$(wc -l < "$SCRIPT_DIR/three_method_comparison_results.csv")
 TOTAL_TESTS=$((TOTAL_ROWS - 1))  # Subtract header
 echo -e "📈 Generated $TOTAL_TESTS test results"
 
@@ -165,13 +165,10 @@ print_success "Python dependencies verified"
 # Create plots directory
 mkdir -p plots
 
-# Define analysis scripts in execution order
+# Define analysis scripts in execution order (in comparison_methods directory)
 ANALYSES=(
-    "plot_execution_time_analysis.py:Execution Time Analysis"
-    "plot_success_rate_analysis.py:Success Rate Analysis"  
-    "plot_clearance_analysis.py:Clearance Analysis"
-    "plot_joint_limit_analysis.py:Joint Limit Analysis"
-    "plot_configuration_variance.py:Configuration Variance Analysis"
+    "comparison_methods/master_plot_generator.py:Complete Analysis with Master Plot Generator"
+    "plot_variance_analysis.py:Original Variance Analysis with Overall and Per-Joint Boxplots"
 )
 
 # Run each analysis

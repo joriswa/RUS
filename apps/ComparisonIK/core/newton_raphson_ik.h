@@ -3,6 +3,7 @@
 #include <Eigen/Dense>
 #include "TrajectoryLib/Robot/RobotArm.h"
 #include <vector>
+#include <limits>
 
 struct NewtonRaphsonIKResult {
     bool success = false;
@@ -47,10 +48,10 @@ public:
 private:
     RobotArm& robot;
     
-    // Solver parameters
-    double position_tolerance = 1e-4;
-    double orientation_tolerance = 1e-3;
-    int max_iterations = 100;
+    // Solver parameters - tolerances adaptive to robot physical limits (Franka ±0.1mm reproducibility)
+    double position_tolerance = std::numeric_limits<double>::quiet_NaN(); // NA - adaptive to robot reproducibility
+    double orientation_tolerance = std::numeric_limits<double>::quiet_NaN(); // NA - adaptive to robot reproducibility
+    int max_iterations = 1000;
     double damping_factor = 0.001; // Small damping for numerical stability
     bool adaptive_damping = false;
     bool enforce_joint_limits = true;

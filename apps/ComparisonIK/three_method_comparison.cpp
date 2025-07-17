@@ -9,18 +9,20 @@
 #include "TrajectoryLib/Robot/RobotArm.h"
 #include "USLib/USTrajectoryPlanner.h"
 #include "core/newton_raphson_ik.h"
+#include "core/grid_search_ik.h"
+#include "core/ik_cost_functions.h"
 
 // =============================================================================
-// SIMULATED ANNEALING PARAMETERS - OPTIMIZED FOR REAL POSES
+// GRID SEARCH PARAMETERS - USING SA FUNCTION SIGNATURE
 // =============================================================================
-// These parameters were optimized using real ultrasound scan poses from 
-// scenario_1/scan_poses.csv and achieved 77.27% success rate with 97.55ms 
-// average execution time across 22 real poses.
+// These parameters control the grid-based search that replaces the original
+// simulated annealing implementation while maintaining the same function
+// signature for compatibility.
 // 
-// Parameter optimization results:
-// - Tested 243 parameter combinations
-// - Found 9 Pareto optimal solutions
-// - Best overall: T_max=10.0, T_min=1.0, alpha=0.9, iter=1000, no_imp=10
+// Parameter usage in grid search:
+// - T_max: Controls grid resolution (higher = finer grid, more thorough)
+// - max_iterations: Maximum evaluation budget for the search
+// - Other parameters (T_min, alpha, max_no_improvement): Maintained for compatibility
 // =============================================================================
 
 struct IKResult {
@@ -41,30 +43,9 @@ struct IKResult {
     int run_id = -1;                  // Run identifier for analysis
 };
 
-// Function to calculate distance to joint limits
+// Function to calculate distance to joint limits (now using shared utilities)
 std::pair<double, double> calculateJointLimitDistances(const Eigen::Matrix<double, 7, 1>& joint_angles) {
-    // Official Franka Panda joint limits (from franka_ik_He.h)
-    const double q_min[7] = {-2.8973, -1.7628, -2.8973, -3.0718, -2.8973, -0.0175, -2.8973};
-    const double q_max[7] = {2.8973, 1.7628, 2.8973, -0.0698, 2.8973, 3.7525, 2.8973};
-    
-    double min_distance = std::numeric_limits<double>::max();
-    double total_distance = 0.0;
-    
-    for (int i = 0; i < 7; i++) {
-        // Distance to lower and upper limits
-        double dist_to_lower = joint_angles(i) - q_min[i];
-        double dist_to_upper = q_max[i] - joint_angles(i);
-        
-        // Minimum distance to either limit for this joint
-        double joint_min_distance = std::min(dist_to_lower, dist_to_upper);
-        
-        // Update overall minimum
-        min_distance = std::min(min_distance, joint_min_distance);
-        total_distance += joint_min_distance;
-    }
-    
-    double avg_distance = total_distance / 7.0;
-    return std::make_pair(min_distance, avg_distance);
+    return IKCostFunctions::computeJointLimitDistances(joint_angles);
 }
 
 std::vector<Eigen::Affine3d> readPosesFromCSV(const std::string& filename) {
@@ -99,7 +80,7 @@ std::vector<Eigen::Affine3d> readPosesFromCSV(const std::string& filename) {
             pose.translation() = position;
             
             // Apply -2cm local z-axis transformation (same as mainwindow.cpp)
-            const Eigen::Vector3d local_move(0.0, 0.0, -0.02);
+            const Eigen::Vector3d local_move(0.0, 0.0, 0.0);
             pose.translation() += pose.rotation() * local_move;
             
             poses.push_back(pose);
@@ -113,7 +94,7 @@ IKResult testNewtonRaphson(NewtonRaphsonIK& solver, const Eigen::Affine3d& targe
                           const Eigen::Matrix<double, 7, 1>& initial_config, UltrasoundScanTrajectoryPlanner& planner, 
                           RobotArm& robot) {
     IKResult result;
-    result.method_name = "Newton-Raphson";
+    result.method_name = "Method1";
     
     auto nr_result = solver.solve(target_pose, initial_config);
     result.success = nr_result.success;
@@ -154,18 +135,19 @@ IKResult testSimulatedAnnealingGoalPose(UltrasoundScanTrajectoryPlanner& planner
                                        RobotArm& robot, 
                                        const Eigen::Affine3d& target_pose) {
     IKResult result;
-    result.method_name = "SA-Optimized";
+    result.method_name = "Method2";
     result.iterations = -1; // Not applicable for this implementation
     
-    // Use optimized SA parameters from real pose analysis
-    // Best overall performance: 77.27% success rate, 97.55ms execution time
-    const double T_max = 10.0;
-    const double T_min = 1.0;
-    const double alpha = 0.9;
-    const int max_iterations = 10000;
-    const int max_no_improvement = 500;
+    // Use parameters to control grid search behavior
+    // T_max controls grid resolution, max_iterations controls evaluation budget
+    const double T_max = 10.0;           // Grid resolution parameter (higher = finer grid)
+    const double T_min = 1.0;            // Unused in grid approach (kept for compatibility)
+    const double alpha = 0.9;            // Unused in grid approach (kept for compatibility)
+    const int max_iterations = 10000;    // Maximum evaluations budget
+    const int max_no_improvement = 500;  // Unused in grid approach (kept for compatibility)
     
     auto start_time = std::chrono::high_resolution_clock::now();
+    // Note: Function name is selectGoalPoseSimulatedAnnealing but now implements grid search
     auto sa_result = planner.getPathPlanner()->selectGoalPoseSimulatedAnnealing(
         target_pose, T_max, T_min, alpha, max_iterations, max_no_improvement);
     auto end_time = std::chrono::high_resolution_clock::now();
@@ -204,6 +186,47 @@ IKResult testSimulatedAnnealingGoalPose(UltrasoundScanTrajectoryPlanner& planner
         result.position_error = std::numeric_limits<double>::infinity();
         result.orientation_error = std::numeric_limits<double>::infinity();
         result.joint_angles.setZero();
+        result.min_clearance = std::numeric_limits<double>::infinity();
+        result.avg_clearance = std::numeric_limits<double>::infinity();
+        result.num_links_checked = 0;
+        result.min_joint_limit_distance = std::numeric_limits<double>::infinity();
+        result.avg_joint_limit_distance = std::numeric_limits<double>::infinity();
+    }
+    
+    return result;
+}
+
+IKResult testGridSearch(GridSearchIK& solver, const Eigen::Affine3d& target_pose, 
+                      const Eigen::Matrix<double, 7, 1>& initial_config, UltrasoundScanTrajectoryPlanner& planner, 
+                      RobotArm& robot) {
+    IKResult result;
+    result.method_name = "Method3";
+    
+    auto gs_result = solver.solve(target_pose, initial_config);
+    result.success = gs_result.success;
+    result.solve_time_ms = gs_result.solve_time;
+    result.position_error = gs_result.position_error;
+    result.orientation_error = gs_result.orientation_error;
+    result.iterations = gs_result.iterations; // Number of q7 values tested
+    result.joint_angles = gs_result.joint_angles;
+    
+    // Check for collisions and compute clearance if solution was successful
+    if (result.success) {
+        robot.setJointAngles(result.joint_angles);
+        result.collision_free = !planner.getPathPlanner()->armHasCollision(robot);
+        
+        // Compute clearance metrics (excluding first two base links and end effector)
+        auto clearance_metrics = planner.getPathPlanner()->computeArmClearance(robot);
+        result.min_clearance = clearance_metrics.min_clearance;
+        result.avg_clearance = clearance_metrics.avg_clearance;
+        result.num_links_checked = clearance_metrics.num_links_checked;
+        
+        // Calculate joint limit distances
+        auto joint_limit_distances = calculateJointLimitDistances(result.joint_angles);
+        result.min_joint_limit_distance = joint_limit_distances.first;
+        result.avg_joint_limit_distance = joint_limit_distances.second;
+    } else {
+        result.collision_free = false;
         result.min_clearance = std::numeric_limits<double>::infinity();
         result.avg_clearance = std::numeric_limits<double>::infinity();
         result.num_links_checked = 0;
@@ -257,18 +280,19 @@ void printHeader() {
 }
 
 void printSummary(const std::vector<IKResult>& nr_results, 
-                  const std::vector<IKResult>& sa_results) {
-    int nr_successes = 0, sa_successes = 0;
-    int nr_collision_free = 0, sa_collision_free = 0;
-    double nr_total_time = 0, sa_total_time = 0;
-    double nr_min_clearance_sum = 0, sa_min_clearance_sum = 0;
-    double nr_avg_clearance_sum = 0, sa_avg_clearance_sum = 0;
-    int nr_clearance_count = 0, sa_clearance_count = 0;
+                  const std::vector<IKResult>& sa_results,
+                  const std::vector<IKResult>& gs_results) {
+    int nr_successes = 0, sa_successes = 0, gs_successes = 0;
+    int nr_collision_free = 0, sa_collision_free = 0, gs_collision_free = 0;
+    double nr_total_time = 0, sa_total_time = 0, gs_total_time = 0;
+    double nr_min_clearance_sum = 0, sa_min_clearance_sum = 0, gs_min_clearance_sum = 0;
+    double nr_avg_clearance_sum = 0, sa_avg_clearance_sum = 0, gs_avg_clearance_sum = 0;
+    int nr_clearance_count = 0, sa_clearance_count = 0, gs_clearance_count = 0;
     
     // Joint limit distance tracking
-    double nr_min_joint_limit_sum = 0, sa_min_joint_limit_sum = 0;
-    double nr_avg_joint_limit_sum = 0, sa_avg_joint_limit_sum = 0;
-    int nr_joint_limit_count = 0, sa_joint_limit_count = 0;
+    double nr_min_joint_limit_sum = 0, sa_min_joint_limit_sum = 0, gs_min_joint_limit_sum = 0;
+    double nr_avg_joint_limit_sum = 0, sa_avg_joint_limit_sum = 0, gs_avg_joint_limit_sum = 0;
+    int nr_joint_limit_count = 0, sa_joint_limit_count = 0, gs_joint_limit_count = 0;
     
     for (const auto& result : nr_results) {
         if (result.success) nr_successes++;
@@ -306,6 +330,25 @@ void printSummary(const std::vector<IKResult>& nr_results,
             }
         }
         sa_total_time += result.solve_time_ms;
+    }
+    
+    for (const auto& result : gs_results) {
+        if (result.success) gs_successes++;
+        if (result.collision_free) {
+            gs_collision_free++;
+            if (result.min_clearance != std::numeric_limits<double>::infinity()) {
+                gs_min_clearance_sum += result.min_clearance;
+                gs_avg_clearance_sum += result.avg_clearance;
+                gs_clearance_count++;
+            }
+            // Add joint limit distance calculations for collision-free solutions
+            if (result.min_joint_limit_distance != std::numeric_limits<double>::infinity()) {
+                gs_min_joint_limit_sum += result.min_joint_limit_distance;
+                gs_avg_joint_limit_sum += result.avg_joint_limit_distance;
+                gs_joint_limit_count++;
+            }
+        }
+        gs_total_time += result.solve_time_ms;
     }
     
     int num_tests = nr_results.size();
@@ -346,31 +389,51 @@ void printSummary(const std::vector<IKResult>& nr_results,
         std::cout << std::setw(10) << "N/A" << std::endl;
     }
     
+    std::cout << std::setw(15) << "Grid-Search" << " | ";
+    std::cout << std::setw(10) << std::fixed << std::setprecision(1) << (100.0 * gs_successes / num_tests) << "%" << " | ";
+    std::cout << std::setw(13) << std::fixed << std::setprecision(1) << (100.0 * gs_collision_free / num_tests) << "%" << " | ";
+    std::cout << std::setw(13) << std::fixed << std::setprecision(2) << (gs_total_time / num_tests) << " | ";
+    if (gs_clearance_count > 0) {
+        std::cout << std::setw(10) << std::fixed << std::setprecision(4) << (gs_min_clearance_sum / gs_clearance_count) << " | ";
+        std::cout << std::setw(10) << std::fixed << std::setprecision(4) << (gs_avg_clearance_sum / gs_clearance_count) << std::endl;
+    } else {
+        std::cout << std::setw(10) << "N/A" << " | ";
+        std::cout << std::setw(10) << "N/A" << std::endl;
+    }
+    
     std::cout << "\nKey Findings:" << std::endl;
     std::cout << "- Newton-Raphson: " << (100.0 * nr_successes / num_tests) << "% success rate, " 
               << (100.0 * nr_collision_free / num_tests) << "% collision-free" << std::endl;
     std::cout << "- SA-Optimized: " << (100.0 * sa_successes / num_tests) << "% success rate, " 
               << (100.0 * sa_collision_free / num_tests) << "% collision-free" << std::endl;
+    std::cout << "- Grid-Search: " << (100.0 * gs_successes / num_tests) << "% success rate, " 
+              << (100.0 * gs_collision_free / num_tests) << "% collision-free" << std::endl;
     
     // Clearance comparisons
-    if (nr_clearance_count > 0 && sa_clearance_count > 0) {
+    if (nr_clearance_count > 0 && sa_clearance_count > 0 && gs_clearance_count > 0) {
         double nr_avg_min_clearance = nr_min_clearance_sum / nr_clearance_count;
         double sa_avg_min_clearance = sa_min_clearance_sum / sa_clearance_count;
+        double gs_avg_min_clearance = gs_min_clearance_sum / gs_clearance_count;
         double nr_avg_avg_clearance = nr_avg_clearance_sum / nr_clearance_count;
         double sa_avg_avg_clearance = sa_avg_clearance_sum / sa_clearance_count;
+        double gs_avg_avg_clearance = gs_avg_clearance_sum / gs_clearance_count;
         
         std::cout << "- Newton-Raphson clearance: min=" << std::fixed << std::setprecision(4) << nr_avg_min_clearance 
                   << " m, avg=" << nr_avg_avg_clearance << " m" << std::endl;
         std::cout << "- SA-Optimized clearance: min=" << std::fixed << std::setprecision(4) << sa_avg_min_clearance 
                   << " m, avg=" << sa_avg_avg_clearance << " m" << std::endl;
+        std::cout << "- Grid-Search clearance: min=" << std::fixed << std::setprecision(4) << gs_avg_min_clearance 
+                  << " m, avg=" << gs_avg_avg_clearance << " m" << std::endl;
     }
     
     // Joint limit distance comparisons
-    if (nr_joint_limit_count > 0 && sa_joint_limit_count > 0) {
+    if (nr_joint_limit_count > 0 && sa_joint_limit_count > 0 && gs_joint_limit_count > 0) {
         double nr_avg_min_joint_limit = nr_min_joint_limit_sum / nr_joint_limit_count;
         double sa_avg_min_joint_limit = sa_min_joint_limit_sum / sa_joint_limit_count;
+        double gs_avg_min_joint_limit = gs_min_joint_limit_sum / gs_joint_limit_count;
         double nr_avg_avg_joint_limit = nr_avg_joint_limit_sum / nr_joint_limit_count;
         double sa_avg_avg_joint_limit = sa_avg_joint_limit_sum / sa_joint_limit_count;
+        double gs_avg_avg_joint_limit = gs_avg_joint_limit_sum / gs_joint_limit_count;
         
         std::cout << "- Newton-Raphson joint limits: min=" << std::fixed << std::setprecision(4) << nr_avg_min_joint_limit 
                   << " rad (" << std::setprecision(1) << (nr_avg_min_joint_limit * 180.0 / M_PI) << "°), avg=" 
@@ -380,6 +443,10 @@ void printSummary(const std::vector<IKResult>& nr_results,
                   << " rad (" << std::setprecision(1) << (sa_avg_min_joint_limit * 180.0 / M_PI) << "°), avg=" 
                   << std::setprecision(4) << sa_avg_avg_joint_limit << " rad (" 
                   << std::setprecision(1) << (sa_avg_avg_joint_limit * 180.0 / M_PI) << "°)" << std::endl;
+        std::cout << "- Grid-Search joint limits: min=" << std::fixed << std::setprecision(4) << gs_avg_min_joint_limit 
+                  << " rad (" << std::setprecision(1) << (gs_avg_min_joint_limit * 180.0 / M_PI) << "°), avg=" 
+                  << std::setprecision(4) << gs_avg_avg_joint_limit << " rad (" 
+                  << std::setprecision(1) << (gs_avg_avg_joint_limit * 180.0 / M_PI) << "°)" << std::endl;
         
         // Safety analysis
         double critical_threshold = 0.1;  // 0.1 rad ≈ 5.7°
@@ -395,17 +462,41 @@ void printSummary(const std::vector<IKResult>& nr_results,
     }
     
     // Performance comparisons
+    std::cout << "\nTiming Analysis:" << std::endl;
+    if (nr_successes > 0) {
+        double nr_avg_time = nr_total_time / nr_successes;
+        std::cout << "- Newton-Raphson avg time: " << std::fixed << std::setprecision(3) << nr_avg_time << " ms" << std::endl;
+    }
+    if (sa_successes > 0) {
+        double sa_avg_time = sa_total_time / sa_successes;
+        std::cout << "- SA-Optimized avg time: " << std::fixed << std::setprecision(3) << sa_avg_time << " ms" << std::endl;
+    }
+    if (gs_successes > 0) {
+        double gs_avg_time = gs_total_time / gs_successes;
+        std::cout << "- Grid-Search avg time: " << std::fixed << std::setprecision(3) << gs_avg_time << " ms" << std::endl;
+    }
+    
     if (nr_successes > 0 && sa_successes > 0) {
         double speedup_nr_vs_sa = (sa_total_time / sa_successes) / (nr_total_time / nr_successes);
         std::cout << "- Newton-Raphson is " << std::fixed << std::setprecision(1) << speedup_nr_vs_sa 
-                  << "x faster than SA-Optimized (on successful cases)" << std::endl;
+                  << "x faster than SA-Optimized" << std::endl;
+    }
+    if (nr_successes > 0 && gs_successes > 0) {
+        double speedup_nr_vs_gs = (gs_total_time / gs_successes) / (nr_total_time / nr_successes);
+        std::cout << "- Newton-Raphson is " << std::fixed << std::setprecision(1) << speedup_nr_vs_gs 
+                  << "x faster than Grid-Search" << std::endl;
+    }
+    if (sa_successes > 0 && gs_successes > 0) {
+        double speedup_sa_vs_gs = (gs_total_time / gs_successes) / (sa_total_time / sa_successes);
+        std::cout << "- SA-Optimized is " << std::fixed << std::setprecision(1) << speedup_sa_vs_gs 
+                  << "x faster than Grid-Search" << std::endl;
     }
 }
 
 int main() {
     std::string urdf_path = "/Users/joris/Uni/MA/Code/PathPlanner_US_wip/res/scenario_1/panda_US.urdf";
-    std::string env_path = "/Users/joris/Uni/MA/Code/PathPlanner_US_wip/res/scenario_1/obstacles.xml";
-    std::string poses_csv = "/Users/joris/Uni/MA/Code/PathPlanner_US_wip/res/scenario_1/scan_poses.csv";
+    std::string env_path = "/Users/joris/Downloads/07_09_2/obstacles.xml";
+    std::string poses_csv = "/Users/joris/Downloads/07_09_2/ext_post_rotated.csv";
     
     try {
         // Initialize robot and planners
@@ -425,14 +516,20 @@ int main() {
         
         printHeader();
         
-        // Initialize unified IK solver
+        // Initialize unified IK solvers
         NewtonRaphsonIK ik_solver(robot);
+        GridSearchIK grid_solver(robot, us_planner.getPathPlanner());
+        
+        // Configure GridSearchIK
+        grid_solver.setPositionTolerance(1e-4);
+        grid_solver.setOrientationTolerance(1e-3);
+        grid_solver.setUseEncoderPrecision(false); // Use faster mode for comparison
         
         // Storage for results - now with multiple runs per pose
-        std::vector<IKResult> nr_results, sa_results;
+        std::vector<IKResult> nr_results, sa_results, gs_results;
         
         // Configuration: 100 runs per method per pose
-        const int RUNS_PER_POSE = 100;
+        const int RUNS_PER_POSE = 10;
         
         // Test each pose
         Eigen::Matrix<double, 7, 1> home_config = Eigen::Matrix<double, 7, 1>::Zero();
@@ -450,8 +547,8 @@ int main() {
             ik_solver.setAdaptiveDamping(true);  // Use adaptive damping near singularities
             
             // Track statistics for this pose
-            int nr_successes = 0, sa_successes = 0;
-            int nr_collision_free = 0, sa_collision_free = 0;
+            int nr_successes = 0, sa_successes = 0, gs_successes = 0;
+            int nr_collision_free = 0, sa_collision_free = 0, gs_collision_free = 0;
             
             // Test Newton-Raphson method - 100 runs
             std::cout << "  Newton-Raphson: ";
@@ -492,18 +589,44 @@ int main() {
             }
             std::cout << "| " << sa_successes << "/" << RUNS_PER_POSE << " success, " 
                       << sa_collision_free << "/" << RUNS_PER_POSE << " collision-free" << std::endl;
+            
+            // Reset counters
+            gs_successes = 0;
+            gs_collision_free = 0;
+            
+            // Test Grid Search - Only 1 run per pose (deterministic)
+            std::cout << "  Grid-Search:    ";
+            robot.setJointAngles(home_config);
+            auto gs_result = testGridSearch(grid_solver, target_pose, home_config, us_planner, robot);
+            gs_result.pose_id = i;  // Add pose ID for analysis
+            gs_result.run_id = 0;   // Only one run needed (deterministic)
+            
+            // Replicate the result for all runs to maintain consistency with other methods
+            for (int run = 0; run < RUNS_PER_POSE; ++run) {
+                IKResult gs_result_copy = gs_result;
+                gs_result_copy.run_id = run;
+                gs_results.push_back(gs_result_copy);
+                
+                if (gs_result.success) gs_successes++;
+                if (gs_result.collision_free) gs_collision_free++;
+                
+                // Progress indicator (quick since it's the same result)
+                if ((run + 1) % 20 == 0) std::cout << (run + 1) << " ";
+            }
+            std::cout << "| " << gs_successes << "/" << RUNS_PER_POSE << " success, " 
+                      << gs_collision_free << "/" << RUNS_PER_POSE << " collision-free" << std::endl;
         }
         
         // Print summary statistics
-        printSummary(nr_results, sa_results);
+        printSummary(nr_results, sa_results, gs_results);
         
         // Save results to CSV for further analysis
-        std::ofstream results_file("two_method_comparison_results.csv");
+        std::ofstream results_file("three_method_comparison_results.csv");
         results_file << "pose_id,run_id,method,success,time_ms,pos_error,ori_error,iterations,collision_free,min_clearance,avg_clearance,num_links_checked,q1,q2,q3,q4,q5,q6,q7\n";
         
         // Output all Newton-Raphson results
         for (const auto& result : nr_results) {
-            results_file << result.pose_id << "," << result.run_id << ",Newton-Raphson," 
+            results_file << result.pose_id << "," << result.run_id << "," << result.method_name << "," 
                         << result.success << "," << result.solve_time_ms << "," 
                         << result.position_error << "," << result.orientation_error << "," 
                         << result.iterations << "," << result.collision_free << "," 
@@ -525,7 +648,7 @@ int main() {
         
         // Output all SA-Optimized results
         for (const auto& result : sa_results) {
-            results_file << result.pose_id << "," << result.run_id << ",SA-Optimized," 
+            results_file << result.pose_id << "," << result.run_id << "," << result.method_name << "," 
                         << result.success << "," << result.solve_time_ms << "," 
                         << result.position_error << "," << result.orientation_error << "," 
                         << result.iterations << "," << result.collision_free << "," 
@@ -545,7 +668,29 @@ int main() {
             results_file << "\n";
         }
         
-        std::cout << "\nResults saved to: two_method_comparison_results.csv" << std::endl;
+        // Output all Grid-Search results
+        for (const auto& result : gs_results) {
+            results_file << result.pose_id << "," << result.run_id << "," << result.method_name << "," 
+                        << result.success << "," << result.solve_time_ms << "," 
+                        << result.position_error << "," << result.orientation_error << "," 
+                        << result.iterations << "," << result.collision_free << "," 
+                        << result.min_clearance << "," << result.avg_clearance << "," 
+                        << result.num_links_checked;
+            
+            // Add joint angles (or NaN if failed)
+            if (result.success) {
+                for (int j = 0; j < 7; j++) {
+                    results_file << "," << result.joint_angles(j);
+                }
+            } else {
+                for (int j = 0; j < 7; j++) {
+                    results_file << ",nan";
+                }
+            }
+            results_file << "\n";
+        }
+        
+        std::cout << "\nResults saved to: three_method_comparison_results.csv" << std::endl;
         
     } catch (const std::exception& e) {
         std::cerr << "Error: " << e.what() << std::endl;
