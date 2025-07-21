@@ -1,0 +1,60 @@
+✓ Redirecting library logs to stderr file to keep CSV clean
+=== Library logs start here ===
+
+=== Enhanced STOMP vs Hauser Trajectory Comparison ===
+Configuration: Using ONLY feasible poses from scan data
+No default/demo poses will be used as fallback
+Trajectory output frequency: 100 Hz
+Loading robot from URDF...
+✓ Robot loaded successfully from: /Users/joris/Uni/MA/Code/PathPlanner_US_wip/res/scenario_1/panda_US.urdf
+  - Robot has 7 joints
+Creating test environment...
+✓ Environment loaded from: /Users/joris/Uni/MA/Code/PathPlanner_US_wip/res/scenario_1/obstacles.xml
+✓ BVH tree created with 186 obstacles
+Setting initial robot configuration...
+✓ Robot set to initial configuration from mainwindow
+  Initial joints: [0.374894, -0.043533, 0.087470, -1.533429, 0.022370, 1.050135, 0.075773]
+Loading scan poses from CSV using mainwindow method...
+Debug: CSV line 1: 0.550252728462219,-0.319555840206281,0.454720935133134,0.0514442378052986,0.3167581059381,0.891220960680185,0.320535476918591,0,0.06,0
+Debug: CSV line 2: 0.539523561795553,-0.31973350056654,0.454702065481416,0.223318916921733,-0.362638057963782,-0.901861053604029,-0.0725874662279386,0,0.06,1
+Debug: CSV line 3: 0.529731895128886,-0.321623900230378,0.457412263925979,0.0783090793412041,-0.308700908326691,-0.908188944805008,-0.271595798614364,0,0.06,1
+Debug: CSV line 4: 0.519106895128886,-0.321012673748424,0.456467718194739,0.0201286272286609,0.344987689527792,0.916599657529333,0.20105571431142,0,0.06,1
+Debug: CSV line 5: 0.509419395128886,-0.320437220831803,0.454563859244317,0.011903249275355,0.345027829414641,0.917800056774349,0.196104985584542,0,0.06,1
+Debug: CSV line 6: 0.497231895128886,-0.320348949153069,0.453293704125023,0.0321205081763977,-0.375536858701609,-0.906260667850457,-0.191394729860207,0,0.06,1
+Debug: CSV line 7: 0.487440228462219,-0.320767511370316,0.452070777422253,0.01562842107634,-0.375505989790867,-0.905876031245527,-0.195293676550714,0,0.06,1
+Debug: CSV line 8: 0.477544395128886,-0.321259953941409,0.450050652914783,0.0215269172422765,-0.341276033448777,-0.896502638145537,-0.28169181852799,0,0.06,1
+Debug: CSV line 9: 0.467231895128886,-0.32213640934353,0.449042003508785,0.0110940823321655,-0.376315767458475,-0.905902528566987,-0.193917439224235,0,0.06,1
+Debug: CSV line 10: 0.451294395128886,-0.32087722069653,0.442191419104088,0.144057080600097,0.248579212337161,0.88364928774541,0.369621250728152,0,0.06,1
+✓ Loaded 10 scan poses from CSV using mainwindow method
+  Note: Only poses marked as valid (last column = 1) will be used
+  ScanPose_1: pos=[0.544, -0.330, 0.471] valid=NO
+  ScanPose_2: pos=[0.547, -0.326, 0.472] valid=YES
+  ScanPose_3: pos=[0.529, -0.332, 0.474] valid=YES
+
+Pre-computing goal configurations for all poses...
+Using aggressive IK parameters: T_max=500.000, iterations=5000
+  Skipping invalid pose: ScanPose_1
+  Computing config for ScanPose_2 at pos=[0.547, -0.326, 0.472] quat=[-0.22,0.36,0.90,0.07]... IK failed (trying 5000 iterations)
+  Computing config for ScanPose_3 at pos=[0.529, -0.332, 0.474] quat=[-0.08,0.31,0.91,0.27]... IK failed (trying 5000 iterations)
+  Computing config for ScanPose_4 at pos=[0.516, -0.328, 0.475] quat=[0.02,0.34,0.92,0.20]... ✓ Success
+  Computing config for ScanPose_5 at pos=[0.506, -0.327, 0.473] quat=[0.01,0.35,0.92,0.20]... ✓ Success
+  Computing config for ScanPose_6 at pos=[0.496, -0.328, 0.472] quat=[-0.03,0.38,0.91,0.19]... ✓ Success
+  Computing config for ScanPose_7 at pos=[0.485, -0.328, 0.471] quat=[-0.02,0.38,0.91,0.20]... ✓ Success
+  Computing config for ScanPose_8 at pos=[0.474, -0.332, 0.467] quat=[-0.02,0.34,0.90,0.28]... ✓ Success
+  Computing config for ScanPose_9 at pos=[0.465, -0.329, 0.468] quat=[-0.01,0.38,0.91,0.19]... ✓ Success
+  Computing config for ScanPose_10 at pos=[0.443, -0.333, 0.456] quat=[0.14,0.25,0.88,0.37]... ✓ Success
+✓ Pre-computed 7/10 goal configurations
+✓ Using 7 feasible poses from scan data
+  (Filtered out 3 infeasible poses)
+Initialization complete.
+
+
+=== Running Full STOMP vs Hauser Comparison ===
+Poses to test: 5
+Trials per pose per algorithm: 3
+
+--- Testing Pose 1/5: ScanPose_4 ---
+  Running STOMP trial 1 for ScanPose_4... ✓ 210.00ms, 103pts
+  Running Hauser trial 1 for ScanPose_4... ✓ 3433.00ms, 381pts
+  Running STOMP trial 2 for ScanPose_4... ✓ 218.00ms, 103pts
+  Running Hauser trial 2 for ScanPose_4... 

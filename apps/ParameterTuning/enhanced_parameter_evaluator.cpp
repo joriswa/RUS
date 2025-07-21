@@ -1,32 +1,30 @@
 #include <iostream>
-#include <iomanip>
-#include <chrono>
 #include <fstream>
-#include <sstream>
-#include <vector>
-#include <cmath>
-#include <algorithm>
-#include <numeric>
-#include <filesystem>
+#include <chrono>
+#include <memory>
 #include <yaml-cpp/yaml.h>
 #include <json/json.h>
-#include <Eigen/Dense>
 
+// Include the trajectory planning headers
 #include "TrajectoryLib/Robot/RobotArm.h"
 #include "TrajectoryLib/Motion/MotionGenerator.h"
 #include "TrajectoryLib/Planning/PathPlanner.h"
 #include "TrajectoryLib/Robot/RobotManager.h"
 #include "GeometryLib/BVHTree.h"
 
-#include <QDebug>
-
-// =============================================================================
-// ENHANCED PARAMETER EVALUATOR FOR SCENARIO_1 DATA
-// =============================================================================
-// This application evaluates STOMP and Hauser parameters using real scenario_1
-// poses and obstacles. It integrates with Python optimization libraries
-// through YAML configuration and JSON output.
-// =============================================================================
+/**
+ * Enhanced Multi-Objective Parameter Evaluator
+ * ===========================================
+ * 
+ * Evaluates STOMP parameters across multiple objectives:
+ * 1. Planning time (efficiency)
+ * 2. Trajectory quality (smoothness, feasibility)
+ * 3. Energy consumption (estimated from acceleration)
+ * 4. Collision margin (safety)
+ * 5. Success rate (reliability)
+ * 
+ * This replaces the single-objective evaluator used in parameter tuning.
+ */
 
 struct PoseData {
     Eigen::Vector3d position;

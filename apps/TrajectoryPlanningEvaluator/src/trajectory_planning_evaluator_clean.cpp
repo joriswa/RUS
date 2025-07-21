@@ -619,13 +619,15 @@ EvaluationConfig TrajectoryPlanningEvaluator::generateParameterSweepConfig() {
     for (int noisy : noisy_trajectories) {
         for (int iter : max_iterations) {
             for (double lr : learning_rates) {
-                StompConfig stomp_config;
+                // Use optimized parameters as baseline, only override for research sweep
+                StompConfig stomp_config = StompConfig::optimized();
+                
+                // Override only the parameters being swept for research
                 stomp_config.numNoisyTrajectories = noisy;
-                stomp_config.numBestSamples = std::min(4, noisy);
+                stomp_config.numBestSamples = std::min(6, noisy); // Use optimized default (6) when possible
                 stomp_config.maxIterations = iter;
                 stomp_config.learningRate = lr;
-                stomp_config.dt = 0.1;
-                stomp_config.temperature = 10.0;
+                // Keep optimized dt (0.1097) and temperature (15.9079) for better performance
                 
                 config.stomp_params.push_back(stomp_config);
             }

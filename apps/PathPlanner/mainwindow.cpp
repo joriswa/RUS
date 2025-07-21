@@ -243,8 +243,11 @@ MainWindow::MainWindow(QWidget *parent)
     Rz = Eigen::AngleAxisd(M_PI_2, Eigen::Vector3d::UnitZ()).toRotationMatrix();
     axes = Rx * Ry * Rz;
 
+    // Initial joint configuration for the trajectory planner
+    std::vector<double> initialJoints = {0.374894, -0.043533, 0.087470, -1.533429, 0.02237, 1.050135, 0.075773};
+    
     _usPlanner = new UltrasoundScanTrajectoryPlanner(
-        "/Users/joris/Uni/MA/robot_definition/panda_US.urdf");
+        "/Users/joris/Uni/MA/robot_definition/panda_US.urdf", initialJoints);
     qDebug() << "Ultrasound trajectory planner initialized";
 
     Eigen::VectorXd angles(7);

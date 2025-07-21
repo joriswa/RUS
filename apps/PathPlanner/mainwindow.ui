@@ -59,7 +59,7 @@
       </rect>
      </property>
      <property name="text">
-      <string>/Users/joris/Downloads/07_09_2/obstacles.xml</string>
+      <string>/Users/joris/Downloads/obstacles-4.xml</string>
      </property>
     </widget>
     <widget class="QPushButton" name="pushButton_loadEnviornment">
@@ -173,7 +173,7 @@
       </rect>
      </property>
      <property name="text">
-      <string>/Users/joris/Downloads/07_09_2/ext_post.csv</string>
+      <string>/Users/joris/Uni/MA/matlab/scan_pose_list_ee.csv</string>
      </property>
     </widget>
     <widget class="QPushButton" name="pushButton_loadScanPoses">

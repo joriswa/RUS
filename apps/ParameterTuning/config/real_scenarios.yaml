@@ -1,0 +1,10 @@
+scenarios:
+  - id: "scenario_1_real"
+    urdf_file: "../../res/scenario_1/panda_US.urdf"
+    environment_file: "../../res/scenario_1/obstacles.xml"
+    poses_file: "../../res/scenario_1/scan_poses.csv"
+    description: "Real ultrasound scanning scenario with actual obstacle configuration"
+    complexity_hints:
+      obstacle_density: "medium"
+      workspace_size: "medium"
+      trajectory_length: "long"

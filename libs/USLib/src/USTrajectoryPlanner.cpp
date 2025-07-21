@@ -1,22 +1,44 @@
 #include "USLib/USTrajectoryPlanner.h"
+#include "TrajectoryLib/Logger.h"
+#include "TrajectoryLib/Planning/PathPlanner.h"
+#include <QDebug>
+#include <fstream>
+#include <chrono>
+#include <iostream>
+#include <iomanip>
+#include <atomic>
+#include <boost/asio/post.hpp>
+#include <boost/asio/use_future.hpp>
 
-UltrasoundScanTrajectoryPlanner::UltrasoundScanTrajectoryPlanner(const std::string &robot_urdf)
+UltrasoundScanTrajectoryPlanner::UltrasoundScanTrajectoryPlanner(const std::string &environmentString, 
+                                                               const std::vector<double> &currentJoints)
+    : _hardwareConfig(HardwareConfig::detect()), _environment(environmentString)
 {
-    // Check if the URDF file exists
-    std::ifstream urdf_file(robot_urdf.c_str());
-    if (!urdf_file.good()) {
-        throw std::runtime_error("Robot URDF file not found: " + robot_urdf);
-    }
-    urdf_file.close();
-
-    _arm = new RobotArm(robot_urdf);
+    // Convert vector<double> to Eigen::VectorXd
+    _currentJoints = Eigen::Map<const Eigen::VectorXd>(currentJoints.data(), currentJoints.size());
+    
+    // Initialize the arm from the environment string (assumed to be URDF)
+    _arm = new RobotArm(environmentString);
     _pathPlanner = new PathPlanner();
     _pathPlanner->setStartPose(*_arm);
     _motionGenerator = new MotionGenerator(*_arm);
+    
+    // Initialize hardware-optimized thread pool
+    initializeThreadPool();
+    
+    LOG_INFO << "Hardware Config - Physical cores:" << _hardwareConfig.physicalCores 
+             << " Logical cores:" << _hardwareConfig.logicalCores
+             << " Optimal batch size:" << _hardwareConfig.batchSize;
 }
 
 UltrasoundScanTrajectoryPlanner::~UltrasoundScanTrajectoryPlanner()
 {
+    // Ensure thread pool is properly shut down
+    if (_sharedThreadPool) {
+        _sharedThreadPool->join();
+        _sharedThreadPool.reset();
+    }
+    
     if (_arm) {
         delete _arm;
         _arm = nullptr;
@@ -70,23 +92,53 @@ UltrasoundScanTrajectoryPlanner::planSingleStompTrajectory(const Eigen::VectorXd
         auto motionGen = new MotionGenerator(*_arm);
         motionGen->setObstacleTree(_obstacleTree);
 
-        Eigen::MatrixXd waypoints(2, startJoints.size());
-        waypoints.row(0) = startJoints.transpose();
-        waypoints.row(1) = targetJoints.transpose();
-
-        motionGen->setWaypoints(waypoints);
-
         unsigned int numThreads = std::thread::hardware_concurrency();
         auto threadPool = std::make_shared<boost::asio::thread_pool>(numThreads);
 
-        motionGen->performSTOMP(config, threadPool);
+        // Simplified approach: Always use RRT Connect path finding + STOMP optimization
+        auto threadPathPlanner = std::make_unique<PathPlanner>();
+        
+        // Configure PathPlanner to use RRT Connect
+        Params rrtConnectParams;
+        rrtConnectParams.algo = RRTConnect;
+        rrtConnectParams.stepSize = 0.02;  // Reduced step size for finer resolution
+        rrtConnectParams.goalBiasProbability = 0.5;
+        rrtConnectParams.maxIterations = 5000;
+        threadPathPlanner->setParams(rrtConnectParams);
+        
+        RobotArm startArm = *_arm;
+        startArm.setJointAngles(startJoints);
+        threadPathPlanner->setStartPose(startArm);
+        threadPathPlanner->setObstacleTree(_obstacleTree);
+
+        RobotArm goalArm = *_arm;
+        goalArm.setJointAngles(targetJoints);
+        threadPathPlanner->setGoalConfiguration(goalArm);
+
+        bool pathFound = threadPathPlanner->runPathFinding();
+
+        if (pathFound) {
+            LOG_INFO << "RRT Connect geometric path planning succeeded";
+            // Get RRT Connect path and optimize with STOMP
+            Eigen::MatrixXd geometricPath = threadPathPlanner->getAnglesPath();
+            motionGen->setWaypoints(geometricPath);
+            
+            // Run STOMP optimization on the RRT Connect path
+            motionGen->performSTOMP(config, threadPool);
+            LOG_INFO << "RRT Connect+STOMP succeeded for single trajectory";
+        } else {
+            LOG_WARNING << "RRT Connect path finding failed for single trajectory";
+            delete motionGen;
+            throw std::runtime_error("RRT Connect path finding failed for single trajectory");
+        }
+        
         threadPool->join();
 
         auto result = std::make_pair(motionGen->getPath(), false);
         delete motionGen;
         return result;
     } catch (const std::exception &e) {
-        qDebug() << "Exception in planSingleStompTrajectory: " << e.what();
+        LOG_ERROR << "Exception in planSingleStompTrajectory: " << e.what();
         throw;
     }
 }
@@ -108,9 +160,9 @@ bool UltrasoundScanTrajectoryPlanner::planTrajectories()
     _trajectories.clear();
 
     unsigned int numThreads = std::thread::hardware_concurrency();
-    qDebug() << "num threads " << numThreads;
+    LOG_INFO << "Hardware threads available: " << numThreads;
     std::shared_ptr<boost::asio::thread_pool> threadPool
-        = std::make_shared<boost::asio::thread_pool>(2 * numThreads);
+        = std::make_shared<boost::asio::thread_pool>(numThreads);
 
     auto checkpointResult = _pathPlanner->planCheckpoints(_poses, _currentJoints);
     auto &checkpoints = checkpointResult.checkpoints;
@@ -118,10 +170,10 @@ bool UltrasoundScanTrajectoryPlanner::planTrajectories()
     auto &jumpPairs = checkpointResult.jumpPairs;
     size_t firstValidIndex = checkpointResult.firstValidIndex;
 
-    // print the indices of the valid segments
-    qDebug() << "Valid segments:";
+    // Log the indices of the valid segments
+    LOG_INFO << "Valid segments identified:";
     for (const auto &segment : validSegments) {
-        qDebug() << "Start:" << segment.first << "End:" << segment.second;
+        LOG_INFO << "  Segment: start=" << segment.first << " end=" << segment.second;
     }
 
     if (checkpoints.size() == 1) {
@@ -131,7 +183,10 @@ bool UltrasoundScanTrajectoryPlanner::planTrajectories()
             throw std::runtime_error("Single checkpoint is invalid.");
         }
 
-        StompConfig config;
+        StompConfig config = StompConfig::optimized(); // Use optimized STOMP configuration
+        config.maxComputeTimeMs = 0.0; // Remove time limit
+        // Simplified approach: Always use RRT Connect path finding + STOMP optimization
+        
         auto trajectory = planSingleStompTrajectory(_currentJoints, arm.getJointAngles(), config);
         _trajectories.push_back(trajectory);
         return true;
@@ -142,8 +197,8 @@ bool UltrasoundScanTrajectoryPlanner::planTrajectories()
         throw std::runtime_error("No valid checkpoint found to start trajectory planning.");
     }
     if (firstValidIndex > 0) {
-        qDebug() << "First" << firstValidIndex
-                 << "checkpoint(s) are invalid. Using first valid checkpoint at index:"
+        LOG_INFO << "First " << firstValidIndex 
+                 << " checkpoint(s) are invalid. Using first valid checkpoint at index: "
                  << firstValidIndex;
     }
 
@@ -166,10 +221,11 @@ bool UltrasoundScanTrajectoryPlanner::planTrajectories()
         futures.push_back(promise.get_future());
     }
 
-    StompConfig config;
-    bool useHauserForRepositioning = false; // TODO: Make this configurable
+    StompConfig config = StompConfig::optimized(); // Use optimized STOMP configuration
+    config.maxComputeTimeMs = 0.0; // Remove time limit
+    // Simplified approach: Always use RRT Connect path finding + STOMP optimization
 
-    boost::asio::post(
+    boost::asio::dispatch(
         *threadPool,
         [this,
          &arms,
@@ -177,8 +233,7 @@ bool UltrasoundScanTrajectoryPlanner::planTrajectories()
          &promises,
          taskIndex = taskIndex++,
          threadPool,
-         config,
-         useHauserForRepositioning]() {
+         config]() {
             try {
                 auto motionGen = new MotionGenerator(*_arm);
                 motionGen->setObstacleTree(_obstacleTree);
@@ -189,42 +244,43 @@ bool UltrasoundScanTrajectoryPlanner::planTrajectories()
 
                 motionGen->setWaypoints(waypoints);
 
-                if (useHauserForRepositioning) {
-                    auto threadPathPlanner = std::make_unique<PathPlanner>();
-                    RobotArm startArm = *_arm;
-                    startArm.setJointAngles(_currentJoints);
-                    threadPathPlanner->setStartPose(startArm);
-                    threadPathPlanner->setObstacleTree(_obstacleTree);
+                // Simplified approach: Always use RRT Connect path finding + STOMP optimization
+                auto threadPathPlanner = std::make_unique<PathPlanner>();
+                
+                // Configure PathPlanner to use RRT Connect
+                Params rrtConnectParams;
+                rrtConnectParams.algo = RRTConnect;
+                rrtConnectParams.stepSize = 0.02;  // Reduced step size for finer resolution
+                rrtConnectParams.goalBiasProbability = 0.5;
+                rrtConnectParams.maxIterations = 5000;
+                threadPathPlanner->setParams(rrtConnectParams);
+                
+                RobotArm startArm = *_arm;
+                startArm.setJointAngles(_currentJoints);
+                threadPathPlanner->setStartPose(startArm);
+                threadPathPlanner->setObstacleTree(_obstacleTree);
 
-                    RobotArm goalArm = *_arm;
-                    goalArm.setJointAngles(arms[firstValidIndex].getJointAngles());
-                    threadPathPlanner->setGoalConfiguration(goalArm);
+                RobotArm goalArm = *_arm;
+                goalArm.setJointAngles(arms[firstValidIndex].getJointAngles());
+                threadPathPlanner->setGoalConfiguration(goalArm);
 
-                    bool pathFound = threadPathPlanner->runPathFinding();
+                bool pathFound = threadPathPlanner->runPathFinding();
 
-                    if (pathFound) {
-                        Eigen::MatrixXd geometricPath = threadPathPlanner->getAnglesPath();
-                        motionGen->setWaypoints(geometricPath);
-                        motionGen->performHauser(300, "", 100);
-                    } else {
-                        qDebug()
-                            << "BiRRT failed for repositioning, terminating trajectory planning";
-                        delete motionGen;
-                        promises[taskIndex].set_exception(std::make_exception_ptr(std::runtime_error(
-                            "Hauser path planning failed for initial repositioning")));
-                        return;
-                    }
+                if (pathFound) {
+                    LOG_INFO << "RRT Connect geometric path planning succeeded";
+                    // Get RRT Connect path and optimize with STOMP
+                    Eigen::MatrixXd geometricPath = threadPathPlanner->getAnglesPath();
+                    motionGen->setWaypoints(geometricPath);
+                    
+                    // Run STOMP optimization on the RRT Connect path
+                    motionGen->performSTOMP(config, threadPool);
+                    LOG_INFO << "RRT Connect+STOMP succeeded for initial repositioning";
                 } else {
-                    try {
-                        motionGen->performSTOMP(config, threadPool);
-                    } catch (const std::exception &e) {
-                        qDebug() << "STOMP failed for repositioning:" << e.what();
-                        delete motionGen;
-                        promises[taskIndex].set_exception(std::make_exception_ptr(std::runtime_error(
-                            "STOMP trajectory planning failed for repositioning: "
-                            + std::string(e.what()))));
-                        return;
-                    }
+                    LOG_WARNING << "RRT Connect path finding failed for initial repositioning";
+                    delete motionGen;
+                    promises[taskIndex].set_exception(std::make_exception_ptr(std::runtime_error(
+                        "RRT Connect path finding failed for initial repositioning")));
+                    return;
                 }
 
                 auto result = std::make_pair(motionGen->getPath(), false);
@@ -274,8 +330,7 @@ bool UltrasoundScanTrajectoryPlanner::planTrajectories()
                  &promises,
                  taskIndex = taskIndex++,
                  threadPool,
-                 config,
-                 useHauserForRepositioning]() {
+                 config]() {
                     try {
                         auto motionGen = new MotionGenerator(*_arm);
                         motionGen->setObstacleTree(_obstacleTree);
@@ -286,35 +341,43 @@ bool UltrasoundScanTrajectoryPlanner::planTrajectories()
 
                         motionGen->setWaypoints(waypoints);
 
-                        if (useHauserForRepositioning) {
+                        // Simplified approach: Always use RRT Connect path finding + STOMP optimization
+                        auto threadPathPlanner = std::make_unique<PathPlanner>();
+                        
+                        // Configure PathPlanner to use RRT Connect
+                        Params rrtConnectParams;
+                        rrtConnectParams.algo = RRTConnect;
+                        rrtConnectParams.stepSize = 0.02;  // Reduced step size for finer resolution
+                        rrtConnectParams.goalBiasProbability = 0.5;
+                        rrtConnectParams.maxIterations = 5000;
+                        threadPathPlanner->setParams(rrtConnectParams);
+                        
+                        RobotArm startArm = *_arm;
+                        startArm.setJointAngles(arms[end].getJointAngles());
+                        threadPathPlanner->setStartPose(startArm);
+                        threadPathPlanner->setObstacleTree(_obstacleTree);
+
+                        RobotArm goalArm = *_arm;
+                        goalArm.setJointAngles(arms[nextStart].getJointAngles());
+                        threadPathPlanner->setGoalConfiguration(goalArm);
+
+                        bool pathFound = threadPathPlanner->runPathFinding();
+
+                        if (pathFound) {
+                            LOG_INFO << "RRT Connect geometric path planning succeeded";
+                            // Get RRT Connect path and optimize with STOMP
+                            Eigen::MatrixXd geometricPath = threadPathPlanner->getAnglesPath();
+                            motionGen->setWaypoints(geometricPath);
                             
-                            auto threadPathPlanner = std::make_unique<PathPlanner>();
-                            RobotArm startArm = *_arm;
-                            startArm.setJointAngles(arms[end].getJointAngles());
-                            threadPathPlanner->setStartPose(startArm);
-                            threadPathPlanner->setObstacleTree(_obstacleTree);
-
-                            RobotArm goalArm = *_arm;
-                            goalArm.setJointAngles(arms[nextStart].getJointAngles());
-                            threadPathPlanner->setGoalConfiguration(goalArm);
-
-                            bool pathFound = threadPathPlanner->runPathFinding();
-
-                            if (pathFound) {
-                                Eigen::MatrixXd geometricPath = threadPathPlanner->getAnglesPath();
-                                motionGen->setWaypoints(geometricPath);
-                                motionGen->performHauser(300, "", 100);
-                            } else {
-                                qDebug() << "BiRRT failed for inter-segment repositioning, "
-                                            "terminating trajectory planning";
-                                delete motionGen;
-                                promises[taskIndex].set_exception(std::make_exception_ptr(
-                                    std::runtime_error("Hauser path planning failed for "
-                                                       "inter-segment repositioning")));
-                                return;
-                            }
-                        } else {
+                            // Run STOMP optimization on the RRT Connect path
                             motionGen->performSTOMP(config, threadPool);
+                            LOG_INFO << "RRT Connect+STOMP succeeded for inter-segment repositioning";
+                        } else {
+                            LOG_WARNING << "RRT Connect path finding failed for inter-segment repositioning";
+                            delete motionGen;
+                            promises[taskIndex].set_exception(std::make_exception_ptr(std::runtime_error(
+                                "RRT Connect path finding failed for inter-segment repositioning")));
+                            return;
                         }
 
                         auto result = std::make_pair(motionGen->getPath(), false);
@@ -341,56 +404,17 @@ bool UltrasoundScanTrajectoryPlanner::planTrajectories()
             auto trajectory = result.first;
             bool isContactForce = result.second;
 
-            // Check for trajectory continuity if we have a previous endpoint
-            if (hasLastEndPosition && !trajectory.empty()) {
-                // Calculate the discrepancy between expected start and actual start
-                Eigen::VectorXd actualStart(trajectory[0].position.size());
-                for (size_t j = 0; j < trajectory[0].position.size(); ++j) {
-                    actualStart[j] = trajectory[0].position[j];
-                }
-                
-                double maxError = 0.0;
-                for (int j = 0; j < lastEndPosition.size(); ++j) {
-                    double error = std::abs(actualStart[j] - lastEndPosition[j]);
-                    maxError = std::max(maxError, error);
-                }
-                
-                if (maxError > 1e-4) {
-                    qDebug() << "TRAJECTORY CONTINUITY ERROR detected at trajectory" << i;
-                    qDebug() << "Maximum joint position error:" << maxError;
-                    qDebug() << "This confirms the trajectory chaining problem you identified!";
-                    
-                    // Log per-joint errors for debugging
-                    for (int j = 0; j < lastEndPosition.size(); ++j) {
-                        double error = std::abs(actualStart[j] - lastEndPosition[j]);
-                        if (error > 1e-6) {
-                            qDebug() << "Joint" << j << "error:" << error;
-                        }
-                    }
-                }
-            }
-
-            // Update the last end position for next trajectory
-            if (!trajectory.empty()) {
-                lastEndPosition.resize(trajectory.back().position.size());
-                for (size_t j = 0; j < trajectory.back().position.size(); ++j) {
-                    lastEndPosition[j] = trajectory.back().position[j];
-                }
-                hasLastEndPosition = true;
-            }
-
             sequentialTrajectories.push_back(result);
         } catch (const std::exception &e) {
             std::string errorMsg = e.what();
-            if (errorMsg.find("Hauser") != std::string::npos) {
-                qDebug() << "Hauser planning failed at trajectory" << i;
+            if (errorMsg.find("RRT Connect") != std::string::npos) {
+                LOG_WARNING << "RRT Connect planning failed at trajectory " << i << ": " << e.what();
             } else if (errorMsg.find("STOMP") != std::string::npos) {
-                qDebug() << "STOMP planning failed at trajectory" << i;
+                LOG_WARNING << "STOMP planning failed at trajectory " << i << ": " << e.what();
             } else {
-                qDebug() << "Unknown planning failure at trajectory" << i;
+                LOG_WARNING << "Unknown planning failure at trajectory " << i << ": " << e.what();
             }
-            qDebug() << "Error:" << e.what();
-            qDebug() << "Discarding" << (futures.size() - i) << "remaining trajectories";
+            LOG_INFO << "Discarding " << (futures.size() - i) << " remaining trajectories";
             repositioningFailed = true;
             break;
         }
@@ -399,7 +423,7 @@ bool UltrasoundScanTrajectoryPlanner::planTrajectories()
     _trajectories = sequentialTrajectories;
 
     threadPool->join();
-
+ 
     return !repositioningFailed;
 }
 
@@ -412,4 +436,150 @@ UltrasoundScanTrajectoryPlanner::getTrajectories()
 std::vector<Eigen::Affine3d> UltrasoundScanTrajectoryPlanner::getScanPoses() const
 {
     return _poses;
+}
+
+void UltrasoundScanTrajectoryPlanner::initializeThreadPool()
+{
+    if (!_sharedThreadPool) {
+        const auto& config = _hardwareConfig;
+        
+        // Create thread pool with optimal core usage
+        // Use physical cores for computational work, reserve logical cores for I/O
+        size_t computeThreads = std::max(1u, config.physicalCores);
+        
+        // For STOMP's parallel trajectory generation, we want sufficient threads
+        // but not so many that we overwhelm the scheduler
+        size_t optimalThreads = std::min(computeThreads, 
+                                       static_cast<size_t>(config.batchSize));
+        
+        _sharedThreadPool = std::make_shared<boost::asio::thread_pool>(optimalThreads);
+        
+        // Pre-warm the thread pool
+        for (size_t i = 0; i < optimalThreads; ++i) {
+            boost::asio::post(*_sharedThreadPool, []() {
+                // Warm-up task - helps with thread initialization overhead
+                std::this_thread::sleep_for(std::chrono::microseconds(1));
+            });
+        }
+    }
+}
+
+std::vector<Trajectory> UltrasoundScanTrajectoryPlanner::planTrajectoryBatch(
+    const std::vector<std::pair<Eigen::VectorXd, Eigen::VectorXd>>& requests)
+{
+    if (requests.empty()) {
+        LOG_WARNING << "Batch planning requested with empty trajectory list";
+        return {};
+    }
+    
+    // Log batch start with configuration details
+    auto startTime = std::chrono::high_resolution_clock::now();
+    LOG_INFO << "Starting trajectory batch planning - " << requests.size() << " trajectories";
+    LOG_INFO << "Hardware config: " << _hardwareConfig.physicalCores << " physical cores, " 
+             << _hardwareConfig.logicalCores << " logical cores, batch size: " 
+             << _hardwareConfig.batchSize;
+    
+    // Ensure thread pool is initialized
+    initializeThreadPool();
+    
+    std::vector<Trajectory> results(requests.size());
+    std::vector<std::future<void>> futures;
+    futures.reserve(requests.size());
+    
+    // Batch size for memory efficiency and cache optimization
+    const size_t batchSize = _hardwareConfig.batchSize;
+    std::atomic<size_t> completedTrajectories{0};
+    std::atomic<size_t> successfulTrajectories{0};
+    
+    for (size_t i = 0; i < requests.size(); i += batchSize) {
+        size_t endIdx = std::min(i + batchSize, requests.size());
+        LOG_DEBUG << "Processing batch " << (i / batchSize + 1) << " (trajectories " 
+                  << i << "-" << (endIdx - 1) << ")";
+        
+        // Process batch
+        for (size_t j = i; j < endIdx; ++j) {
+            auto future = boost::asio::post(*_sharedThreadPool, 
+                boost::asio::use_future([this, j, &requests, &results, &completedTrajectories, &successfulTrajectories]() {
+                    try {
+                        // Each thread gets its own motion generator to avoid contention
+                        MotionGenerator localGenerator(*_arm);
+                        
+                        // Use optimized STOMP configuration
+                        auto config = StompConfig::optimized();
+                        config.maxComputeTimeMs = 0.0; // Remove time limit
+                        
+                        // Set obstacle tree if available
+                        if (_obstacleTree) {
+                            localGenerator.setObstacleTree(_obstacleTree);
+                        }
+                        
+                        // Set start and target joints for the trajectory
+                        const auto& startJoints = requests[j].first;
+                        const auto& targetJoints = requests[j].second;
+                        
+                        // Create waypoints matrix as expected by MotionGenerator
+                        Eigen::MatrixXd waypoints(2, startJoints.size());
+                        waypoints.row(0) = startJoints.transpose();
+                        waypoints.row(1) = targetJoints.transpose();
+                        
+                        localGenerator.setWaypoints(waypoints);
+                        
+                        // Create a thread pool with optimal cores for STOMP's internal parallelization
+                        // STOMP benefits from multiple threads for its noisy trajectory generation
+                        size_t stompThreads = std::max(2u, _hardwareConfig.physicalCores / 2);
+                        auto localThreadPool = std::make_shared<boost::asio::thread_pool>(stompThreads);
+                        
+                        // Perform STOMP planning with trajectory index for context
+                        bool success = localGenerator.performSTOMP(config, localThreadPool, static_cast<int>(j));
+                        localThreadPool->join();
+                        
+                        if (success) {
+                            results[j] = localGenerator.getPath();
+                            successfulTrajectories++;
+                        } else {
+                            LOG_WARNING << "[Traj " << j << "] STOMP planning failed";
+                        }
+                        completedTrajectories++;
+                        
+                    } catch (const std::exception& e) {
+                        // Log error but continue with other trajectories
+                        LOG_ERROR << "[Traj " << j << "] Batch planning exception: " << e.what();
+                        completedTrajectories++;
+                        // results[j] remains default-constructed (empty)
+                    }
+                }));
+            
+            futures.push_back(std::move(future));
+        }
+        
+        // Optional: Add small delay between batches to prevent CPU saturation
+        if (endIdx < requests.size()) {
+            std::this_thread::sleep_for(std::chrono::microseconds(100));
+        }
+    }
+    
+    // Wait for all trajectories to complete
+    for (auto& future : futures) {
+        try {
+            future.get();
+        } catch (const std::exception& e) {
+            LOG_ERROR << "Future completion error: " << e.what();
+        }
+    }
+    
+    // Calculate timing and log completion statistics
+    auto endTime = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
+    
+    LOG_INFO << "Trajectory batch planning completed:";
+    LOG_INFO << "  Total trajectories: " << requests.size();
+    LOG_INFO << "  Successful: " << successfulTrajectories << " (" 
+             << std::fixed << std::setprecision(1) 
+             << (100.0 * successfulTrajectories / requests.size()) << "%)";
+    LOG_INFO << "  Failed: " << (requests.size() - successfulTrajectories);
+    LOG_INFO << "  Duration: " << duration.count() << "ms";
+    LOG_INFO << "  Average: " << std::fixed << std::setprecision(2) 
+             << (duration.count() / static_cast<double>(requests.size())) << "ms per trajectory";
+
+    return results;
 }

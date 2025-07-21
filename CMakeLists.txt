@@ -43,10 +43,9 @@ add_subdirectory(apps/PathPlanner)
 add_subdirectory(apps/Evaluator)
 # add_subdirectory(apps/ComparisonIK)
 add_subdirectory(apps/ComparisonSTOMPHauser)
-add_subdirectory(apps/ScanProcessTest)
 add_subdirectory(apps/UltrasoundRepositioningEvaluator)
 add_subdirectory(apps/TrajectoryPlanningEvaluator)
-add_subdirectory(apps/ParameterTuning)
+ # add_subdirectory(apps/ParameterTuning)
 
 # Install configuration
 include(GNUInstallDirs)

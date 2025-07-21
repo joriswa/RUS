@@ -2,6 +2,10 @@
 
 A comprehensive parameter optimization system for trajectory planning algorithms in ultrasound scanning applications. This application optimizes STOMP and Hauser trajectory planners using real motion generation libraries and actual scenario data.
 
+## Quick Start Guide
+
+See [USAGE.md](USAGE.md) for a simple getting started guide.
+
 ## Overview
 
 The Parameter Tuning application provides:
@@ -11,43 +15,43 @@ The Parameter Tuning application provides:
 - **Rich visualizations** and detailed analysis reports
 - **Production-ready results** with optimized parameter configurations
 
-## Quick Start
+## System Architecture
 
-### Prerequisites
+### Core Components
 
-1. **Build the C++ evaluator**:
-   ```bash
-   cd PathPlanner_US_wip/build
-   make EnhancedParameterEvaluator
-   ```
+1. **C++ Evaluator** (`enhanced_parameter_evaluator.cpp`)
+   - Integrates with TrajectoryLib, USLib motion planning libraries
+   - Loads real ultrasound scanning poses from scenario_1 (22 poses)
+   - Evaluates trajectory quality with comprehensive metrics
+   - YAML input → JSON output interface
 
-2. **Install Python dependencies**:
-   ```bash
-   pip install numpy pandas matplotlib seaborn optuna pyyaml scipy
-   ```
+2. **Python Optimization** (`enhanced_parameter_optimizer.py`)
+   - Multi-optimizer support: Optuna, scikit-optimize, Ray Tune, Hyperopt
+   - Bayesian optimization with advanced samplers
+   - Parallel/distributed optimization capabilities
+   - Automatic parameter space definition
 
-3. **Verify scenario data** (should exist in `../../res/scenario_1/`):
-   - `obstacles.xml` - Environment obstacles
-   - `panda_US.urdf` - Robot model
-   - `scan_poses.csv` - Ultrasound scanning poses
-
-### Basic Usage
-
-```bash
-# Quick optimization (20 trials each, simple scenarios)
-python run_parameter_optimization.py --quick
-
-# Full optimization (100 trials each, all scenarios)
-python run_parameter_optimization.py --full
-
-# Optimize specific algorithm
-python run_parameter_optimization.py --algorithm STOMP --trials 50
-
-# Create comprehensive visualizations
-python create_comprehensive_plots.py
-```
+3. **Execution Interface** (`run_parameter_optimization.py`)
+   - Simple command-line interface
+   - Quick/full optimization modes
+   - Algorithm-specific tuning options
 
 ## File Structure
+
+```
+ParameterTuning/
+├── enhanced_parameter_evaluator.cpp    # C++ evaluation engine (current)
+├── enhanced_parameter_optimizer.py     # Python optimization framework  
+├── run_parameter_optimization.py       # Main execution script
+├── create_comprehensive_plots.py       # Visualization tools
+├── diagnose_parameter_sensitivity.py   # Analysis tools
+├── debug_raw_outputs.py               # Debugging utilities
+├── USAGE.md                            # Quick start guide
+├── archive/                            # Legacy implementations
+├── scripts/                            # Additional utilities  
+├── results/                            # Optimization results
+└── plots/                             # Generated visualizations
+```
 
 ```
 ParameterTuning/

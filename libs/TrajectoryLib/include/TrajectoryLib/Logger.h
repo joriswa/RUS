@@ -15,7 +15,7 @@
 
 // Runtime enable/disable for different log levels
 #ifndef LOG_LEVEL_DEBUG
-#define LOG_LEVEL_DEBUG 1
+#define LOG_LEVEL_DEBUG 0
 #endif
 
 #ifndef LOG_LEVEL_INFO

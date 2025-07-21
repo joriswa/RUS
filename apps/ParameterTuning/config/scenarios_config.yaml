@@ -1,0 +1,70 @@
+# Example Scenarios Configuration for Smart Parameter Optimization
+# ===============================================================
+
+# Single scenario example
+# -----------------------
+# Use this format for optimizing a single scenario:
+#
+# name: "scenario_1_knee_ultrasound"
+# urdf_file: "../../res/scenario_1/panda_US.urdf"
+# environment_file: "../../res/scenario_1/obstacles.xml"
+# poses_file: "../../res/scenario_1/scan_poses.csv"
+# description: "Knee ultrasound scanning with complex obstacles"
+
+# Multiple scenarios example
+# --------------------------
+# List of scenarios for comprehensive optimization
+
+- name: "scenario_1_knee_ultrasound"
+  urdf_file: "../../res/scenario_1/panda_US.urdf"
+  environment_file: "../../res/scenario_1/obstacles.xml"
+  poses_file: "../../res/scenario_1/scan_poses.csv"
+  description: "Knee ultrasound scanning with complex obstacles"
+  complexity_level: "high"
+  expected_challenges:
+    - "Narrow corridors between obstacles"
+    - "Complex orientation changes"
+    - "High workspace utilization"
+
+- name: "scenario_2_simple_scanning"
+  urdf_file: "../../res/scenario_2/panda_US.urdf"
+  environment_file: "../../res/scenario_2/obstacles.xml"
+  poses_file: "../../res/scenario_2/scan_poses.csv"
+  description: "Simple ultrasound scanning with minimal obstacles"
+  complexity_level: "low"
+  expected_challenges:
+    - "Basic trajectory smoothness"
+    - "Minimal collision avoidance"
+
+- name: "scenario_3_dense_obstacles"
+  urdf_file: "../../res/scenario_3/panda_US.urdf"
+  environment_file: "../../res/scenario_3/obstacles.xml"
+  poses_file: "../../res/scenario_3/scan_poses.csv"
+  description: "Dense obstacle environment"
+  complexity_level: "very_high"
+  expected_challenges:
+    - "High obstacle density"
+    - "Complex path planning"
+    - "Multiple local minima"
+
+- name: "scenario_4_large_workspace"
+  urdf_file: "../../res/scenario_4/panda_US.urdf"
+  environment_file: "../../res/scenario_4/obstacles.xml"
+  poses_file: "../../res/scenario_4/scan_poses.csv"
+  description: "Large workspace with distributed poses"
+  complexity_level: "medium"
+  expected_challenges:
+    - "Large joint movements"
+    - "Kinematic complexity"
+    - "Energy optimization"
+
+- name: "scenario_5_precision_required"
+  urdf_file: "../../res/scenario_5/panda_US.urdf"
+  environment_file: "../../res/scenario_5/obstacles.xml"
+  poses_file: "../../res/scenario_5/scan_poses.csv"
+  description: "High precision scanning requirements"
+  complexity_level: "medium"
+  expected_challenges:
+    - "Orientation precision"
+    - "Trajectory smoothness"
+    - "Contact force control"

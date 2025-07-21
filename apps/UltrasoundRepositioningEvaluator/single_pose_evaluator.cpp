@@ -56,7 +56,8 @@ void SinglePoseEvaluator::setupAlgorithmConfigs() {
 bool SinglePoseEvaluator::initializePlanner() {
     try {
         log("Creating UltrasoundScanTrajectoryPlanner...");
-        planner_ = std::make_unique<UltrasoundScanTrajectoryPlanner>(config_.robot_urdf_path);
+        planner_ = std::make_unique<UltrasoundScanTrajectoryPlanner>(config_.robot_urdf_path, 
+                                                                   std::vector<double>(config_.current_joint_angles.begin(), config_.current_joint_angles.end()));
         
         log("Setting environment...");
         planner_->setEnvironment(config_.environment_xml_path);

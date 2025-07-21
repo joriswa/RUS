@@ -570,7 +570,7 @@ bool PathPlanner::getNewNode(State &randomPoint,
     bg::set<3>(randomPoint, std::clamp(bg::get<3>(randomPoint), 0.0, 1.0));
     bg::set<4>(randomPoint, std::clamp(bg::get<4>(randomPoint), 0.0, 1.0));
     bg::set<5>(randomPoint, std::clamp(bg::get<5>(randomPoint), 0.0, 1.0));
-    bg::set<6>(randomPoint, std::clamp(bg::get<5>(randomPoint), 0.0, 1.0));
+    bg::set<6>(randomPoint, std::clamp(bg::get<6>(randomPoint), 0.0, 1.0));
 
     RobotArm closestArmState = nearestNode->_arm;
 
@@ -608,6 +608,12 @@ bool PathPlanner::performRRTConnect()
 
     NodePtr start = std::make_shared<PathNode>(_startArm.getJointState(), _startArm);
     NodePtr goal = std::make_shared<PathNode>(_goalArm.getJointState(), _goalArm);
+
+    // Check for immediate connection before iterating
+    if (motionIsValid(_startArm, _goalArm, true)) {
+        constructPath(start, goal);
+        return true;
+    }
 
     startTree.insert(std::make_pair(_startArm.getJointState(), start));
     goalTree.insert(std::make_pair(_goalArm.getJointState(), goal));
@@ -1296,8 +1302,8 @@ std::pair<RobotArm, bool> PathPlanner::selectGoalPoseSimulatedAnnealing(const Ei
                             
                             // 3. Add manipulability (lowest priority)
                             double manipulability = temp.computeManipulability();
-                            cost += 0.25 * (1.0 - manipulability);
-                            
+                            cost += 0.25 * manipulability;
+
                             // Update local best
                             if (!local_has_solution || cost < local_best_cost) {
                                 local_best_solution = angles;

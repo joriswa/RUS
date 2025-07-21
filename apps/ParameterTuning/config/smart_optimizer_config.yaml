@@ -1,0 +1,69 @@
+# Smart Multi-Objective STOMP Parameter Optimization Configuration
+# ================================================================
+
+# Output directory for results
+output_dir: "results/smart_optimization"
+
+# Model directory for ML models
+model_dir: "models/adaptive_models"
+
+# C++ evaluator executable
+cpp_executable: "../../build/apps/ParameterTuning/multi_objective_evaluator"
+
+# Multi-objective optimization settings
+generations: 50                # Number of NSGA-II generations
+population_size: 30           # Population size for NSGA-II
+ml_candidates: 5              # Number of ML-predicted candidates for warm start
+
+# Evaluation settings
+max_evaluation_time: 30       # Maximum time per evaluation (seconds)
+parallel_evaluations: 4       # Number of parallel evaluations
+
+# ML model settings
+model_training:
+  retrain_threshold: 20       # Retrain models after N new samples
+  cross_validation_folds: 5   # K-fold CV for model validation
+  ensemble_models: true       # Use ensemble of multiple ML models
+
+# Scenario analysis settings
+scenario_analysis:
+  feature_normalization: true  # Normalize scenario features
+  clustering_method: "kmeans"  # Scenario clustering method
+  complexity_weighting:
+    obstacle_density: 0.3
+    orientation_complexity: 0.2
+    workspace_coverage: 0.2
+    collision_margin: 0.15
+    manipulability_variation: 0.15
+
+# Adaptive parameter bounds
+parameter_bounds:
+  num_noisy_trajectories: [10, 100]
+  num_best_samples: [5, 50]
+  max_iterations: [50, 500]
+  learning_rate: [0.1, 1.0]
+  temperature: [1.0, 50.0]
+  dt: [0.01, 0.2]
+  velocity_limit: [0.5, 3.0]
+  acceleration_limit: [0.1, 1.0]
+
+# Multi-objective weights (for compromise solution selection)
+objective_weights:
+  planning_time: 0.3         # Minimize planning time
+  trajectory_quality: 0.3    # Maximize trajectory quality
+  energy_consumption: 0.2    # Minimize energy consumption
+  collision_margin: 0.1      # Maximize safety margin
+  success_rate: 0.1          # Maximize success rate
+
+# Visualization settings
+visualization:
+  generate_plots: true
+  plot_format: "png"
+  plot_dpi: 300
+  save_intermediate_plots: false
+
+# Logging settings
+logging:
+  level: "INFO"
+  save_to_file: true
+  log_file: "logs/smart_optimization.log"

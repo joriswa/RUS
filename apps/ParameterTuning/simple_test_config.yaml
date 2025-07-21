@@ -1,0 +1,21 @@
+# Simple test configuration for parameter evaluation
+algorithm: STOMP
+
+# STOMP Parameters  
+num_noisy_trajectories: 50
+num_best_samples: 20
+max_iterations: 100
+learning_rate: 0.3
+temperature: 15.0
+dt: 0.05
+velocity_limit: 1.5
+acceleration_limit: 0.4
+
+# Robot and environment
+urdf_file: "/Users/joris/Uni/MA/Code/PathPlanner_US_wip/res/scenario_1/panda_US.urdf"
+environment_file: "/Users/joris/Uni/MA/Code/PathPlanner_US_wip/res/scenario_1/obstacles.xml" 
+poses_file: "/Users/joris/Uni/MA/Code/PathPlanner_US_wip/res/scenario_1/scan_poses.csv"
+
+# Output settings
+output_prefix: "real_test"
+verbose: true

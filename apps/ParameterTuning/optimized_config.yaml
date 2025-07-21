@@ -1,0 +1,28 @@
+algorithm: STOMP
+parameters:
+  num_noisy_trajectories: 84
+  num_best_samples: 6
+  max_iterations: 500
+  learning_rate: 0.2284
+  temperature: 15.9079
+  dt: 0.1097
+  velocity_limit: 1.5
+  acceleration_limit: 0.4
+
+scenarios:
+  - name: optimized_test_scenario
+    description: Test with optimized STOMP parameters
+    difficulty: 1
+    start_config: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    environment: scenario_1
+    urdf: panda_US
+
+evaluation_settings:
+  num_runs_per_scenario: 3
+  timeout_seconds: 30
+  output_trajectories: false
+
+resources:
+  obstacles_file: /Users/joris/Uni/MA/Code/PathPlanner_US_wip/res/scenario_1/obstacles.xml
+  urdf_file: /Users/joris/Uni/MA/Code/PathPlanner_US_wip/res/scenario_1/panda_US.urdf
+  poses_file: /Users/joris/Uni/MA/Code/PathPlanner_US_wip/res/scenario_1/scan_poses.csv
