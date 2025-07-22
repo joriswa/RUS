@@ -95,42 +95,15 @@ UltrasoundScanTrajectoryPlanner::planSingleStompTrajectory(const Eigen::VectorXd
         unsigned int numThreads = std::thread::hardware_concurrency();
         auto threadPool = std::make_shared<boost::asio::thread_pool>(numThreads);
 
-        // Simplified approach: Always use RRT Connect path finding + STOMP optimization
-        auto threadPathPlanner = std::make_unique<PathPlanner>();
+        // Simple straight-line STOMP optimization
+        Eigen::MatrixXd waypoints(2, startJoints.size());
+        waypoints.row(0) = startJoints.transpose();
+        waypoints.row(1) = targetJoints.transpose();
+        motionGen->setWaypoints(waypoints);
         
-        // Configure PathPlanner to use RRT Connect
-        Params rrtConnectParams;
-        rrtConnectParams.algo = RRTConnect;
-        rrtConnectParams.stepSize = 0.02;  // Reduced step size for finer resolution
-        rrtConnectParams.goalBiasProbability = 0.5;
-        rrtConnectParams.maxIterations = 5000;
-        threadPathPlanner->setParams(rrtConnectParams);
-        
-        RobotArm startArm = *_arm;
-        startArm.setJointAngles(startJoints);
-        threadPathPlanner->setStartPose(startArm);
-        threadPathPlanner->setObstacleTree(_obstacleTree);
-
-        RobotArm goalArm = *_arm;
-        goalArm.setJointAngles(targetJoints);
-        threadPathPlanner->setGoalConfiguration(goalArm);
-
-        bool pathFound = threadPathPlanner->runPathFinding();
-
-        if (pathFound) {
-            LOG_INFO << "RRT Connect geometric path planning succeeded";
-            // Get RRT Connect path and optimize with STOMP
-            Eigen::MatrixXd geometricPath = threadPathPlanner->getAnglesPath();
-            motionGen->setWaypoints(geometricPath);
-            
-            // Run STOMP optimization on the RRT Connect path
-            motionGen->performSTOMP(config, threadPool);
-            LOG_INFO << "RRT Connect+STOMP succeeded for single trajectory";
-        } else {
-            LOG_WARNING << "RRT Connect path finding failed for single trajectory";
-            delete motionGen;
-            throw std::runtime_error("RRT Connect path finding failed for single trajectory");
-        }
+        // Run STOMP optimization with straight-line initialization
+        motionGen->performSTOMP(config, threadPool);
+        LOG_INFO << "STOMP optimization succeeded for single trajectory";
         
         threadPool->join();
 
@@ -185,7 +158,7 @@ bool UltrasoundScanTrajectoryPlanner::planTrajectories()
 
         StompConfig config = StompConfig::optimized(); // Use optimized STOMP configuration
         config.maxComputeTimeMs = 0.0; // Remove time limit
-        // Simplified approach: Always use RRT Connect path finding + STOMP optimization
+        // Simple straight-line STOMP optimization
         
         auto trajectory = planSingleStompTrajectory(_currentJoints, arm.getJointAngles(), config);
         _trajectories.push_back(trajectory);
@@ -223,7 +196,7 @@ bool UltrasoundScanTrajectoryPlanner::planTrajectories()
 
     StompConfig config = StompConfig::optimized(); // Use optimized STOMP configuration
     config.maxComputeTimeMs = 0.0; // Remove time limit
-    // Simplified approach: Always use RRT Connect path finding + STOMP optimization
+    // Simple straight-line STOMP optimization
 
     boost::asio::dispatch(
         *threadPool,
@@ -238,50 +211,15 @@ bool UltrasoundScanTrajectoryPlanner::planTrajectories()
                 auto motionGen = new MotionGenerator(*_arm);
                 motionGen->setObstacleTree(_obstacleTree);
 
+                // Simple straight-line STOMP optimization
                 Eigen::MatrixXd waypoints(2, _currentJoints.size());
                 waypoints.row(0) = _currentJoints.transpose();
                 waypoints.row(1) = arms[firstValidIndex].getJointAngles().transpose();
-
                 motionGen->setWaypoints(waypoints);
-
-                // Simplified approach: Always use RRT Connect path finding + STOMP optimization
-                auto threadPathPlanner = std::make_unique<PathPlanner>();
                 
-                // Configure PathPlanner to use RRT Connect
-                Params rrtConnectParams;
-                rrtConnectParams.algo = RRTConnect;
-                rrtConnectParams.stepSize = 0.02;  // Reduced step size for finer resolution
-                rrtConnectParams.goalBiasProbability = 0.5;
-                rrtConnectParams.maxIterations = 5000;
-                threadPathPlanner->setParams(rrtConnectParams);
-                
-                RobotArm startArm = *_arm;
-                startArm.setJointAngles(_currentJoints);
-                threadPathPlanner->setStartPose(startArm);
-                threadPathPlanner->setObstacleTree(_obstacleTree);
-
-                RobotArm goalArm = *_arm;
-                goalArm.setJointAngles(arms[firstValidIndex].getJointAngles());
-                threadPathPlanner->setGoalConfiguration(goalArm);
-
-                bool pathFound = threadPathPlanner->runPathFinding();
-
-                if (pathFound) {
-                    LOG_INFO << "RRT Connect geometric path planning succeeded";
-                    // Get RRT Connect path and optimize with STOMP
-                    Eigen::MatrixXd geometricPath = threadPathPlanner->getAnglesPath();
-                    motionGen->setWaypoints(geometricPath);
-                    
-                    // Run STOMP optimization on the RRT Connect path
-                    motionGen->performSTOMP(config, threadPool);
-                    LOG_INFO << "RRT Connect+STOMP succeeded for initial repositioning";
-                } else {
-                    LOG_WARNING << "RRT Connect path finding failed for initial repositioning";
-                    delete motionGen;
-                    promises[taskIndex].set_exception(std::make_exception_ptr(std::runtime_error(
-                        "RRT Connect path finding failed for initial repositioning")));
-                    return;
-                }
+                // Run STOMP optimization with straight-line initialization
+                motionGen->performSTOMP(config, threadPool);
+                LOG_INFO << "STOMP optimization succeeded for initial repositioning";
 
                 auto result = std::make_pair(motionGen->getPath(), false);
                 delete motionGen;
@@ -335,50 +273,15 @@ bool UltrasoundScanTrajectoryPlanner::planTrajectories()
                         auto motionGen = new MotionGenerator(*_arm);
                         motionGen->setObstacleTree(_obstacleTree);
 
+                        // Simple straight-line STOMP optimization
                         Eigen::MatrixXd waypoints(2, _currentJoints.size());
                         waypoints.row(0) = arms[end].getJointAngles().transpose();
                         waypoints.row(1) = arms[nextStart].getJointAngles().transpose();
-
                         motionGen->setWaypoints(waypoints);
-
-                        // Simplified approach: Always use RRT Connect path finding + STOMP optimization
-                        auto threadPathPlanner = std::make_unique<PathPlanner>();
                         
-                        // Configure PathPlanner to use RRT Connect
-                        Params rrtConnectParams;
-                        rrtConnectParams.algo = RRTConnect;
-                        rrtConnectParams.stepSize = 0.02;  // Reduced step size for finer resolution
-                        rrtConnectParams.goalBiasProbability = 0.5;
-                        rrtConnectParams.maxIterations = 5000;
-                        threadPathPlanner->setParams(rrtConnectParams);
-                        
-                        RobotArm startArm = *_arm;
-                        startArm.setJointAngles(arms[end].getJointAngles());
-                        threadPathPlanner->setStartPose(startArm);
-                        threadPathPlanner->setObstacleTree(_obstacleTree);
-
-                        RobotArm goalArm = *_arm;
-                        goalArm.setJointAngles(arms[nextStart].getJointAngles());
-                        threadPathPlanner->setGoalConfiguration(goalArm);
-
-                        bool pathFound = threadPathPlanner->runPathFinding();
-
-                        if (pathFound) {
-                            LOG_INFO << "RRT Connect geometric path planning succeeded";
-                            // Get RRT Connect path and optimize with STOMP
-                            Eigen::MatrixXd geometricPath = threadPathPlanner->getAnglesPath();
-                            motionGen->setWaypoints(geometricPath);
-                            
-                            // Run STOMP optimization on the RRT Connect path
-                            motionGen->performSTOMP(config, threadPool);
-                            LOG_INFO << "RRT Connect+STOMP succeeded for inter-segment repositioning";
-                        } else {
-                            LOG_WARNING << "RRT Connect path finding failed for inter-segment repositioning";
-                            delete motionGen;
-                            promises[taskIndex].set_exception(std::make_exception_ptr(std::runtime_error(
-                                "RRT Connect path finding failed for inter-segment repositioning")));
-                            return;
-                        }
+                        // Run STOMP optimization with straight-line initialization
+                        motionGen->performSTOMP(config, threadPool);
+                        LOG_INFO << "STOMP optimization succeeded for inter-segment repositioning";
 
                         auto result = std::make_pair(motionGen->getPath(), false);
                         delete motionGen;
@@ -407,9 +310,7 @@ bool UltrasoundScanTrajectoryPlanner::planTrajectories()
             sequentialTrajectories.push_back(result);
         } catch (const std::exception &e) {
             std::string errorMsg = e.what();
-            if (errorMsg.find("RRT Connect") != std::string::npos) {
-                LOG_WARNING << "RRT Connect planning failed at trajectory " << i << ": " << e.what();
-            } else if (errorMsg.find("STOMP") != std::string::npos) {
+            if (errorMsg.find("STOMP") != std::string::npos) {
                 LOG_WARNING << "STOMP planning failed at trajectory " << i << ": " << e.what();
             } else {
                 LOG_WARNING << "Unknown planning failure at trajectory " << i << ": " << e.what();
