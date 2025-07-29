@@ -70,8 +70,8 @@ public:
     bool SegmentFeasible(const ParabolicRamp::Vector &a, const ParabolicRamp::Vector &b);
 
 private:
-    std::shared_ptr<BVHTree> _obstacleTree;
-    RobotArm _arm;
+    std::shared_ptr<BVHTree> _obstacleTree;        ///< BVH tree for collision detection
+    RobotArm _arm;                                 ///< Robot arm model
 };
 
 /**
@@ -127,14 +127,23 @@ public:
 class ObstacleCostCalculator : public CostCalculator
 {
 private:
-    RobotArm _arm;
-    std::shared_ptr<BVHTree> _obstacleTree;
-    std::vector<std::vector<std::vector<double>>> _sdf;
-    Eigen::Vector3d _sdfMinPoint;
-    Eigen::Vector3d _sdfMaxPoint;
-    double _sdfResolution;
+    RobotArm _arm;                                                ///< Robot arm model
+    std::shared_ptr<BVHTree> _obstacleTree;                      ///< BVH tree for collision detection
+    std::vector<std::vector<std::vector<double>>> _sdf;          ///< Signed distance field
+    Eigen::Vector3d _sdfMinPoint;                                ///< SDF bounding box minimum
+    Eigen::Vector3d _sdfMaxPoint;                                ///< SDF bounding box maximum
+    double _sdfResolution;                                       ///< SDF grid resolution
 
 public:
+    /**
+     * @brief Construct obstacle cost calculator
+     * @param arm Robot arm model
+     * @param obstacleTree BVH tree for collision detection
+     * @param sdf Signed distance field grid
+     * @param sdfMinPoint SDF bounding box minimum corner
+     * @param sdfMaxPoint SDF bounding box maximum corner  
+     * @param sdfResolution SDF grid resolution
+     */
     ObstacleCostCalculator(RobotArm arm,
                            std::shared_ptr<BVHTree> obstacleTree,
                            const std::vector<std::vector<std::vector<double>>> &sdf,
@@ -145,6 +154,11 @@ public:
     double computeCost(const Eigen::MatrixXd &trajectory, double dt) override;
 };
 
+/**
+ * @brief Cost calculator for joint velocity and acceleration constraints
+ * 
+ * Computes penalty costs when trajectory violates joint velocity or acceleration limits.
+ */
 class ConstraintCostCalculator : public CostCalculator
 {
 private:
@@ -152,59 +166,36 @@ private:
     std::vector<double> _maxJointAccelerations = std::vector<double>(7, .5);
 
 public:
+    /**
+     * @brief Construct constraint cost calculator
+     * @param maxVel Maximum joint velocities
+     * @param maxAcc Maximum joint accelerations  
+     */
     ConstraintCostCalculator(const std::vector<double> &maxVel, const std::vector<double> &maxAcc);
 
     double computeCost(const Eigen::MatrixXd &trajectory, double dt) override;
 };
 
-class TaskSpacePathTrackingCostCalculator : public CostCalculator
-{
-public:
-    /**
-     * Constructor that converts joint space checkpoints to task space path
-     * @param arm Robot arm model for forward kinematics
-     * @param jointCheckpoints List of joint configurations defining the path
-     * @param positionWeight Weight for position deviation cost
-     * @param orientationWeight Weight for orientation deviation cost
-     */
-    TaskSpacePathTrackingCostCalculator(RobotArm arm,
-                                        const std::vector<Eigen::VectorXd> &jointCheckpoints,
-                                        double positionWeight = 2.0,
-                                        double orientationWeight = 1.0);
-
-    /**
-     * Compute the cost of a trajectory by measuring deviations from the task space path
-     * @param trajectory Joint trajectory in matrix form
-     * @param dt Time step
-     * @return Total cost
-     */
-    double computeCost(const Eigen::MatrixXd &trajectory, double dt) override;
-
-private:
-    /**
-     * Interpolate position and orientation along the path
-     * @param s Path parameter (0 to 1)
-     * @return Interpolated position and orientation
-     */
-    std::pair<Eigen::Vector3d, Eigen::Matrix3d> interpolateTaskSpacePath(double s);
-
-    RobotArm _arm;
-    std::vector<Eigen::Vector3d> _taskSpacePositions;
-    std::vector<Eigen::Matrix3d> _taskSpaceOrientations;
-    std::vector<double> _cumulativeDistances;
-    double _totalDistance;
-    double _positionWeight;
-    double _orientationWeight;
-};
-
+/**
+ * @brief Composite cost calculator combining multiple cost functions
+ * 
+ * Allows combining different cost calculators with individual weights
+ * to create complex objective functions for trajectory optimization.
+ */
 class CompositeCostCalculator : public CostCalculator
 {
 private:
-    std::vector<std::unique_ptr<CostCalculator>> _costCalculators;
-    std::vector<double> _weights;
+    std::vector<std::unique_ptr<CostCalculator>> _costCalculators; ///< Individual cost calculators
+    std::vector<double> _weights;                                  ///< Weights for each calculator
 
 public:
+    /**
+     * @brief Add a cost calculator with specified weight
+     * @param calculator Cost calculator to add
+     * @param weight Weight for this calculator in total cost
+     */
     void addCostCalculator(std::unique_ptr<CostCalculator> calculator, double weight);
+    
     double computeCost(const Eigen::MatrixXd &trajectory, double dt) override;
 };
 
@@ -219,10 +210,10 @@ public:
      */
     struct TrajectoryPoint
     {
-        std::vector<double> position;
-        std::vector<double> velocity;
-        std::vector<double> acceleration;
-        double time;
+        std::vector<double> position;     ///< Joint positions
+        std::vector<double> velocity;     ///< Joint velocities  
+        std::vector<double> acceleration; ///< Joint accelerations
+        double time;                      ///< Time stamp
     };
 
     /**
@@ -391,20 +382,20 @@ private:
         std::vector<std::pair<double, double>> limits;
     };
 
-    std::unique_ptr<CompositeCostCalculator> _costCalculator;
-    std::vector<TrajectoryPoint> _path;
-    std::vector<double> _maxJointVelocities = std::vector<double>(7, .4);
-    std::vector<double> _maxJointAccelerations = std::vector<double>(7, .5);
-    Eigen::MatrixXd _M, _R, _L;
-    bool _matricesInitialized = false;
-    Eigen::MatrixXd _waypoints;
-    const int _numJoints = 7;
-    std::shared_ptr<BVHTree> _obstacleTree;
-    RobotArm _arm;
-    std::vector<std::vector<std::vector<double>>> _sdf;
-    Eigen::Vector3d _sdfMinPoint, _sdfMaxPoint;
-    double _sdfResolution;
-    bool _sdfInitialized = false;
+    std::unique_ptr<CompositeCostCalculator> _costCalculator;     ///< Cost function for optimization
+    std::vector<TrajectoryPoint> _path;                          ///< Optimized trajectory
+    std::vector<double> _maxJointVelocities = std::vector<double>(7, .4);  ///< Joint velocity limits
+    std::vector<double> _maxJointAccelerations = std::vector<double>(7, .5); ///< Joint acceleration limits
+    Eigen::MatrixXd _M, _R, _L;                                  ///< STOMP smoothing matrices
+    bool _matricesInitialized = false;                          ///< Flag for matrix initialization
+    Eigen::MatrixXd _waypoints;                                  ///< Waypoints for trajectory planning
+    const int _numJoints = 7;                                   ///< Number of robot joints
+    std::shared_ptr<BVHTree> _obstacleTree;                     ///< BVH tree for collision detection
+    RobotArm _arm;                                              ///< Robot arm model
+    std::vector<std::vector<std::vector<double>>> _sdf;         ///< Signed distance field
+    Eigen::Vector3d _sdfMinPoint, _sdfMaxPoint;                 ///< SDF bounding box
+    double _sdfResolution;                                      ///< SDF grid resolution
+    bool _sdfInitialized = false;                               ///< Flag for SDF initialization
 
     // Original helper methods
     void generateInitialTrajectory();
@@ -421,44 +412,134 @@ private:
     void initializeCostCalculator();
     void initializeCostCalculatorCheckpoints(const std::vector<Eigen::VectorXd> &checkpoints);
 
-    // Refactored STOMP helper methods
+    // STOMP helper methods
+    /**
+     * @brief Initialize STOMP optimization data structures
+     * @param config STOMP configuration
+     * @param sharedPool Optional shared thread pool
+     * @return Initialization data structure
+     */
     STOMPInitData initializeSTOMPExecution(const StompConfig &config,
                                            std::shared_ptr<boost::asio::thread_pool> sharedPool);
+    
+    /**
+     * @brief Generate noisy trajectory samples for STOMP iteration
+     * @param config STOMP configuration
+     * @param theta Current trajectory estimate
+     * @param limits Joint limits
+     * @param bestSamples Best samples from previous iterations
+     * @param pool Thread pool for parallelization
+     * @return Vector of noisy trajectory samples
+     */
     std::vector<Eigen::MatrixXd> generateNoisySamples(const StompConfig &config,
                                                       const Eigen::MatrixXd &theta,
                                                       const std::vector<std::pair<double, double>> &limits,
                                                       const std::vector<std::pair<Eigen::MatrixXd, double>> &bestSamples,
                                                       boost::asio::thread_pool* pool);
+    
+    /**
+     * @brief Evaluate costs and compute weights for trajectory samples
+     * @param trajectories Trajectory samples to evaluate
+     * @param config STOMP configuration
+     * @param dt Time step
+     * @param pool Thread pool for parallelization
+     * @return Pair of costs and probability weights
+     */
     std::pair<std::vector<double>, Eigen::VectorXd> evaluateTrajectories(
         const std::vector<Eigen::MatrixXd> &trajectories,
         const StompConfig &config,
         double dt,
         boost::asio::thread_pool* pool);
+    
+    /**
+     * @brief Update best samples with lowest costs from current iteration
+     * @param trajectories Current iteration trajectories
+     * @param costs Corresponding trajectory costs
+     * @param bestSamples Best samples storage (modified)
+     * @param numBestSamples Number of best samples to keep
+     */
     void updateBestSamples(const std::vector<Eigen::MatrixXd> &trajectories,
                            const std::vector<double> &costs,
                            std::vector<std::pair<Eigen::MatrixXd, double>> &bestSamples,
                            int numBestSamples);
+    
+    /**
+     * @brief Apply STOMP trajectory update using weighted samples
+     * @param theta Current trajectory estimate
+     * @param noisyTrajectories Noisy trajectory samples
+     * @param weights Probability weights for samples
+     * @param config STOMP configuration
+     * @param N Number of trajectory points
+     * @param limits Joint limits
+     * @return Updated trajectory estimate
+     */
     Eigen::MatrixXd applyTrajectoryUpdate(const Eigen::MatrixXd &theta,
                                           const std::vector<Eigen::MatrixXd> &noisyTrajectories,
                                           const Eigen::VectorXd &weights,
-                                          int numJoints,
+                                          const StompConfig &config,
                                           int N,
                                           const std::vector<std::pair<double, double>> &limits);
+    
+    /**
+     * @brief Check trajectory for collisions using parallel processing
+     * @param theta Trajectory to check
+     * @param N Number of trajectory points
+     * @return True if collision detected
+     */
     bool checkCollisions(const Eigen::MatrixXd &theta, int N);
+    
+    /**
+     * @brief Update convergence state and early stopping counters
+     * @param state Convergence state (modified)
+     * @param theta Current trajectory
+     * @param config STOMP configuration
+     * @param iteration Current iteration number
+     * @param dt Time step
+     * @param collisionFree Whether trajectory is collision-free
+     */
     void updateConvergenceState(STOMPConvergenceState &state,
                                 const Eigen::MatrixXd &theta,
                                 const StompConfig &config,
                                 int iteration,
                                 double dt,
                                 bool collisionFree);
+    
+    /**
+     * @brief Check if time limit exceeded
+     * @param config STOMP configuration
+     * @param timer Elapsed time timer
+     * @param iteration Current iteration
+     * @param success Whether solution found
+     * @param bestCost Best cost found
+     * @return True if time limit exceeded
+     */
     bool checkTimeLimit(const StompConfig &config,
                         const QElapsedTimer &timer,
                         int iteration,
                         bool success,
                         double bestCost);
+    
+    /**
+     * @brief Check convergence criteria for early termination
+     * @param state Convergence state
+     * @param config STOMP configuration
+     * @param iteration Current iteration
+     * @return True if convergence criteria met
+     */
     bool checkConvergence(const STOMPConvergenceState &state,
                           const StompConfig &config,
                           int iteration);
+    
+    /**
+     * @brief Finalize STOMP optimization and generate trajectory points
+     * @param theta Final trajectory estimate
+     * @param state Convergence state
+     * @param config STOMP configuration
+     * @param N Number of trajectory points
+     * @param dt Time step
+     * @param timer Elapsed time timer
+     * @return True if successful
+     */
     bool finalizeSTOMPResult(const Eigen::MatrixXd &theta,
                              const STOMPConvergenceState &state,
                              const StompConfig &config,
