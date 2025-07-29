@@ -1,8 +1,8 @@
 #include "TrajectoryLib/Motion/MotionGenerator.h"
 #include "TrajectoryLib/Robot/franka_ik_He.h"
+#include <atomic>
 #include <cmath>
 #include <future>
-#include <atomic>
 bool MotionGenerator::armHasCollision(std::vector<double> jointPositions)
 {
     RobotArm temp = _arm;
@@ -31,15 +31,15 @@ bool MotionGenerator::isSdfInitialized() const
 {
     return _sdfInitialized;
 }
-const std::vector<std::vector<std::vector<double>>>& MotionGenerator::getSdf() const
+const std::vector<std::vector<std::vector<double>>> &MotionGenerator::getSdf() const
 {
     return _sdf;
 }
-const Eigen::Vector3d& MotionGenerator::getSdfMinPoint() const
+const Eigen::Vector3d &MotionGenerator::getSdfMinPoint() const
 {
     return _sdfMinPoint;
 }
-const Eigen::Vector3d& MotionGenerator::getSdfMaxPoint() const
+const Eigen::Vector3d &MotionGenerator::getSdfMaxPoint() const
 {
     return _sdfMaxPoint;
 }
@@ -96,12 +96,12 @@ MotionGenerator::MotionGenerator(RobotArm arm)
 {
     _arm = arm;
 }
-MotionGenerator::MotionGenerator(RobotArm arm, 
-                               const std::vector<std::vector<std::vector<double>>>& sdf,
-                               const Eigen::Vector3d& sdfMinPoint,
-                               const Eigen::Vector3d& sdfMaxPoint,
-                               double sdfResolution,
-                               std::shared_ptr<BVHTree> obstacleTree)
+MotionGenerator::MotionGenerator(RobotArm arm,
+                                 const std::vector<std::vector<std::vector<double>>> &sdf,
+                                 const Eigen::Vector3d &sdfMinPoint,
+                                 const Eigen::Vector3d &sdfMaxPoint,
+                                 double sdfResolution,
+                                 std::shared_ptr<BVHTree> obstacleTree)
 {
     _arm = arm;
     _sdf = sdf;
@@ -157,7 +157,7 @@ std::vector<MotionGenerator::TrajectoryPoint> MotionGenerator::computeTimeOptima
         t_acc = std::sqrt(total_distance / a_max);
         total_time = 2 * t_acc;
     }
-    int numPoints = static_cast<int>(total_time / 0.05); 
+    int numPoints = static_cast<int>(total_time / 0.05);
     for (int i = 0; i <= numPoints; ++i) {
         double t = static_cast<double>(i) / numPoints * total_time;
         TrajectoryPoint point;
@@ -266,26 +266,35 @@ bool MotionGenerator::performSTOMP(const StompConfig &config,
 {
     QElapsedTimer timer;
     timer.start();
-    LOG_INFO << "STOMP optimization: " << config.numNoisyTrajectories << " samples, " 
+    LOG_INFO << "STOMP optimization: " << config.numNoisyTrajectories << " samples, "
              << config.maxIterations << " max iterations";
     auto initData = initializeSTOMPExecution(config, sharedPool);
-    auto& theta = initData.theta;
-    auto* pool = initData.pool;
+    auto &theta = initData.theta;
+    auto *pool = initData.pool;
     int N = initData.N;
     double dt = initData.dt;
-    auto& limits = initData.limits;
+    auto &limits = initData.limits;
     STOMPConvergenceState convergenceState;
     std::vector<std::pair<Eigen::MatrixXd, double>> bestSamples;
     for (int iteration = 0; iteration < config.maxIterations; iteration++) {
-        if (checkTimeLimit(config, convergenceState.overallTimer, iteration, convergenceState.success, convergenceState.bestCollisionFreeCost)) {
+        if (checkTimeLimit(config,
+                           convergenceState.overallTimer,
+                           iteration,
+                           convergenceState.success,
+                           convergenceState.bestCollisionFreeCost)) {
             break;
         }
         auto noisyTrajectories = generateNoisySamples(config, theta, limits, bestSamples, pool);
         auto [costs, weights] = evaluateTrajectories(noisyTrajectories, config, dt, pool);
         updateBestSamples(noisyTrajectories, costs, bestSamples, config.numBestSamples);
         theta = applyTrajectoryUpdate(theta, noisyTrajectories, weights, config, N, limits);
+        
+        // Explicit collision and constraint checking
         bool collisionFree = !checkCollisions(theta, N);
-        updateConvergenceState(convergenceState, theta, config, iteration, dt, collisionFree);
+        bool constraintsValid = isTrajectoryValidWithMargin(theta, dt, 1.2, 1.2);
+        bool trajectoryValid = collisionFree && constraintsValid;
+        
+        updateConvergenceState(convergenceState, theta, config, iteration, dt, trajectoryValid);
         if (checkConvergence(convergenceState, config, iteration)) {
             break;
         }
@@ -293,12 +302,11 @@ bool MotionGenerator::performSTOMP(const StompConfig &config,
     return finalizeSTOMPResult(theta, convergenceState, config, N, dt, timer);
 }
 MotionGenerator::STOMPInitData MotionGenerator::initializeSTOMPExecution(
-    const StompConfig &config,
-    std::shared_ptr<boost::asio::thread_pool> sharedPool)
+    const StompConfig &config, std::shared_ptr<boost::asio::thread_pool> sharedPool)
 {
     _path.clear();
     createSDF();
-    initializeCostCalculator();
+    initializeCostCalculator(config);
     STOMPInitData initData;
     if (sharedPool) {
         initData.pool = sharedPool.get();
@@ -319,9 +327,9 @@ MotionGenerator::STOMPInitData MotionGenerator::initializeSTOMPExecution(
         end.acceleration.push_back(0.0);
     }
     auto segment = computeTimeOptimalSegment(start, end, 0.0);
-    double estimatedTime = segment.back().time;
-    initData.dt = config.dt;
-    initData.N = static_cast<int>(estimatedTime / initData.dt) + 1;
+    double estimatedTime = segment.back().time * 1.5; // give the optimizer time to breathe
+    initData.N = config.N; // Use N from config instead of calculating dynamically
+    initData.dt = estimatedTime / (initData.N - 1); // Calculate dt based on trajectory time and N
     initData.theta = initializeTrajectory(goalVec, startVec, initData.N, config.numJoints);
     initializeMatrices(initData.N, initData.dt);
     initData.limits = _arm.jointLimits();
@@ -332,7 +340,7 @@ std::vector<Eigen::MatrixXd> MotionGenerator::generateNoisySamples(
     const Eigen::MatrixXd &theta,
     const std::vector<std::pair<double, double>> &limits,
     const std::vector<std::pair<Eigen::MatrixXd, double>> &bestSamples,
-    boost::asio::thread_pool* pool)
+    boost::asio::thread_pool *pool)
 {
     int actualBestSamples = std::min(config.numBestSamples, static_cast<int>(bestSamples.size()));
     std::vector<Eigen::MatrixXd> noisyTrajectories(config.numNoisyTrajectories + actualBestSamples);
@@ -342,14 +350,18 @@ std::vector<Eigen::MatrixXd> MotionGenerator::generateNoisySamples(
         futures.push_back(promise.get_future());
     }
     for (int k = 0; k < config.numNoisyTrajectories; ++k) {
-        boost::asio::dispatch(*pool, [this, k, &noisyTrajectories, &theta, &config, &limits, &promises]() {
-            try {
-                noisyTrajectories[k] = generateNoisyTrajectory(theta, config.jointStdDevs, limits);
-                promises[k].set_value();
-            } catch (...) {
-                promises[k].set_exception(std::current_exception());
-            }
-        });
+        boost::asio::dispatch(*pool,
+                              [this, k, &noisyTrajectories, &theta, &config, &limits, &promises]() {
+                                  try {
+                                      noisyTrajectories[k]
+                                          = generateNoisyTrajectory(theta,
+                                                                    config.jointStdDevs,
+                                                                    limits);
+                                      promises[k].set_value();
+                                  } catch (...) {
+                                      promises[k].set_exception(std::current_exception());
+                                  }
+                              });
     }
     for (auto &future : futures) {
         future.wait();
@@ -363,7 +375,7 @@ std::pair<std::vector<double>, Eigen::VectorXd> MotionGenerator::evaluateTraject
     const std::vector<Eigen::MatrixXd> &trajectories,
     const StompConfig &config,
     double dt,
-    boost::asio::thread_pool* pool)
+    boost::asio::thread_pool *pool)
 {
     int totalSamples = static_cast<int>(trajectories.size());
     std::vector<double> costs(totalSamples);
@@ -393,28 +405,30 @@ std::pair<std::vector<double>, Eigen::VectorXd> MotionGenerator::evaluateTraject
     double costRange = maxCost - minCost;
     Eigen::VectorXd weights(totalSamples);
     if (costRange < 1e-6) {
-        weights.setConstant(1.0 / config.numNoisyTrajectories);
+        weights.setConstant(1.0 / totalSamples); // Use totalSamples instead of numNoisyTrajectories
     } else {
-        Eigen::VectorXd expCosts = (-config.temperature * (costVector.array() - minCost) / costRange).exp();
+        Eigen::VectorXd expCosts
+            = (-config.temperature * (costVector.array() - minCost) / costRange).exp();
         weights = expCosts / expCosts.sum();
     }
     return {costs, weights};
 }
-void MotionGenerator::updateBestSamples(
-    const std::vector<Eigen::MatrixXd> &trajectories,
-    const std::vector<double> &costs,
-    std::vector<std::pair<Eigen::MatrixXd, double>> &bestSamples,
-    int numBestSamples)
+void MotionGenerator::updateBestSamples(const std::vector<Eigen::MatrixXd> &trajectories,
+                                        const std::vector<double> &costs,
+                                        std::vector<std::pair<Eigen::MatrixXd, double>> &bestSamples,
+                                        int numBestSamples)
 {
     std::vector<std::pair<Eigen::MatrixXd, double>> iterationSamples;
     for (size_t k = 0; k < trajectories.size() && k < costs.size(); k++) {
         iterationSamples.push_back({trajectories[k], costs[k]});
     }
-    std::sort(iterationSamples.begin(), iterationSamples.end(),
-              [](const auto &a, const auto &b) { return a.second < b.second; });
+    std::sort(iterationSamples.begin(), iterationSamples.end(), [](const auto &a, const auto &b) {
+        return a.second < b.second;
+    });
     bestSamples = std::vector<std::pair<Eigen::MatrixXd, double>>(
         iterationSamples.begin(),
-        iterationSamples.begin() + std::min(numBestSamples, static_cast<int>(iterationSamples.size())));
+        iterationSamples.begin()
+            + std::min(numBestSamples, static_cast<int>(iterationSamples.size())));
 }
 Eigen::MatrixXd MotionGenerator::applyTrajectoryUpdate(
     const Eigen::MatrixXd &theta,
@@ -434,9 +448,7 @@ Eigen::MatrixXd MotionGenerator::applyTrajectoryUpdate(
     Eigen::MatrixXd updatedTheta = theta + config.learningRate * deltaS;
     for (int i = 0; i < N - 1; i++) {
         for (int d = 0; d < config.numJoints; d++) {
-            updatedTheta(i, d) = std::clamp(updatedTheta(i, d),
-                                           limits[d].first,
-                                           limits[d].second);
+            updatedTheta(i, d) = std::clamp(updatedTheta(i, d), limits[d].first, limits[d].second);
         }
     }
     return updatedTheta;
@@ -444,8 +456,8 @@ Eigen::MatrixXd MotionGenerator::applyTrajectoryUpdate(
 bool MotionGenerator::checkCollisions(const Eigen::MatrixXd &theta, int N)
 {
     std::atomic<bool> collides{false};
-    const int numWaypoints = N - 2; 
-    const int sparseStep = 4; 
+    const int numWaypoints = N - 2;
+    const int sparseStep = 4;
     std::vector<std::future<void>> sparseFutures;
     for (int i = 1; i < N - 1; i += sparseStep) {
         sparseFutures.emplace_back(std::async(std::launch::async, [this, &theta, &collides, i]() {
@@ -458,7 +470,7 @@ bool MotionGenerator::checkCollisions(const Eigen::MatrixXd &theta, int N)
             }
         }));
     }
-    for (auto& future : sparseFutures) {
+    for (auto &future : sparseFutures) {
         future.wait();
     }
     if (!collides.load()) {
@@ -468,30 +480,30 @@ bool MotionGenerator::checkCollisions(const Eigen::MatrixXd &theta, int N)
         for (int t = 0; t < numThreads && !collides.load(); ++t) {
             int startIdx = t * waypointsPerThread + 1;
             int endIdx = (t == numThreads - 1) ? N - 1 : startIdx + waypointsPerThread;
-            collisionFutures.emplace_back(std::async(std::launch::async, [this, &theta, &collides, startIdx, endIdx]() {
-                RobotArm checkArm = _arm;
-                for (int i = startIdx; i < endIdx && !collides.load(); ++i) {
-                    checkArm.setJointAngles(theta.row(i));
-                    if (armHasCollision(checkArm)) {
-                        collides.store(true);
-                        return;
+            collisionFutures.emplace_back(
+                std::async(std::launch::async, [this, &theta, &collides, startIdx, endIdx]() {
+                    RobotArm checkArm = _arm;
+                    for (int i = startIdx; i < endIdx && !collides.load(); ++i) {
+                        checkArm.setJointAngles(theta.row(i));
+                        if (armHasCollision(checkArm)) {
+                            collides.store(true);
+                            return;
+                        }
                     }
-                }
-            }));
+                }));
         }
-        for (auto& future : collisionFutures) {
+        for (auto &future : collisionFutures) {
             future.wait();
         }
     }
     return collides.load();
 }
-void MotionGenerator::updateConvergenceState(
-    STOMPConvergenceState &state,
-    const Eigen::MatrixXd &theta,
-    const StompConfig &config,
-    int iteration,
-    double dt,
-    bool collisionFree)
+void MotionGenerator::updateConvergenceState(STOMPConvergenceState &state,
+                                             const Eigen::MatrixXd &theta,
+                                             const StompConfig &config,
+                                             int iteration,
+                                             double dt,
+                                             bool collisionFree)
 {
     double trajectoryCost = _costCalculator->computeCost(theta, dt);
     double trajectoryCostDiff = std::abs(trajectoryCost - state.prevTrajectoryCost);
@@ -502,12 +514,12 @@ void MotionGenerator::updateConvergenceState(
             state.bestCollisionFreeCost = trajectoryCost;
             state.bestCollisionFreeTheta = theta;
             LOG_DEBUG << "Better collision-free solution found at iteration " << iteration
-                     << " (cost: " << std::fixed << std::setprecision(4) << trajectoryCost << ")";
+                      << " (cost: " << std::fixed << std::setprecision(4) << trajectoryCost << ")";
         }
         if (config.enableEarlyStopping) {
             state.earlyStoppingCounter++;
-            LOG_DEBUG << "Collision-free trajectory found (early stopping: " 
-                     << state.earlyStoppingCounter << "/" << config.earlyStoppingPatience << ")";
+            LOG_DEBUG << "Collision-free trajectory found (early stopping: "
+                      << state.earlyStoppingCounter << "/" << config.earlyStoppingPatience << ")";
         }
     } else {
         if (config.enableEarlyStopping) {
@@ -520,62 +532,58 @@ void MotionGenerator::updateConvergenceState(
         state.noChangeCounter = 0;
     }
 }
-bool MotionGenerator::checkTimeLimit(
-    const StompConfig &config,
-    const QElapsedTimer &timer,
-    int iteration,
-    bool success,
-    double bestCost)
+bool MotionGenerator::checkTimeLimit(const StompConfig &config,
+                                     const QElapsedTimer &timer,
+                                     int iteration,
+                                     bool success,
+                                     double bestCost)
 {
     if (config.maxComputeTimeMs > 0.0 && timer.elapsed() > config.maxComputeTimeMs) {
-        LOG_INFO << "Time limit exceeded (" << config.maxComputeTimeMs 
-                 << "ms) after " << iteration << " iterations";
+        LOG_INFO << "Time limit exceeded (" << config.maxComputeTimeMs << "ms) after " << iteration
+                 << " iterations";
         if (!success) {
-            throw StompTimeoutException("STOMP exceeded time limit without finding collision-free solution");
+            throw StompTimeoutException(
+                "STOMP exceeded time limit without finding collision-free solution");
         } else {
-            LOG_INFO << "Using best collision-free solution found (cost: " 
-                     << std::fixed << std::setprecision(4) << bestCost << ")";
+            LOG_INFO << "Using best collision-free solution found (cost: " << std::fixed
+                     << std::setprecision(4) << bestCost << ")";
             return true;
         }
     }
     return false;
 }
-bool MotionGenerator::checkConvergence(
-    const STOMPConvergenceState &state,
-    const StompConfig &config,
-    int iteration)
+bool MotionGenerator::checkConvergence(const STOMPConvergenceState &state,
+                                       const StompConfig &config,
+                                       int iteration)
 {
     if (config.enableEarlyStopping && state.earlyStoppingCounter >= config.earlyStoppingPatience) {
-        LOG_INFO << "Early stopping after " << iteration + 1 << " iterations (cost: " 
-                 << std::fixed << std::setprecision(4) << state.bestCollisionFreeCost << ")";
+        LOG_INFO << "Early stopping after " << iteration + 1 << " iterations (cost: " << std::fixed
+                 << std::setprecision(4) << state.bestCollisionFreeCost << ")";
         return true;
     }
     if (state.noChangeCounter >= STOMPConvergenceState::convergencePatience && state.success) {
-        LOG_INFO << "Cost converged after " << iteration + 1
-                 << " iterations (cost: " 
-                 << std::fixed << std::setprecision(4) << state.bestCollisionFreeCost << ")";
+        LOG_INFO << "Cost converged after " << iteration + 1 << " iterations (cost: " << std::fixed
+                 << std::setprecision(4) << state.bestCollisionFreeCost << ")";
         return true;
     }
     return false;
 }
-bool MotionGenerator::finalizeSTOMPResult(
-    const Eigen::MatrixXd &theta,
-    const STOMPConvergenceState &state,
-    const StompConfig &config,
-    int N,
-    double dt,
-    const QElapsedTimer &timer)
+bool MotionGenerator::finalizeSTOMPResult(const Eigen::MatrixXd &theta,
+                                          const STOMPConvergenceState &state,
+                                          const StompConfig &config,
+                                          int N,
+                                          double dt,
+                                          const QElapsedTimer &timer)
 {
     LOG_FAST_DEBUG << "Optimization complete: " << timer.elapsed() << "ms";
     Eigen::MatrixXd finalTheta = theta;
     if (state.success && state.bestCollisionFreeTheta.rows() > 0) {
-        LOG_INFO << "STOMP completed (cost: " 
-                 << std::fixed << std::setprecision(4) << state.bestCollisionFreeCost
-                 << ", " << timer.elapsed() << "ms)";
+        LOG_INFO << "STOMP completed (cost: " << std::fixed << std::setprecision(4)
+                 << state.bestCollisionFreeCost << ", " << timer.elapsed() << "ms)";
         finalTheta = state.bestCollisionFreeTheta;
     } else {
-        LOG_WARNING << "STOMP failed after " << config.maxIterations 
-                   << " iterations (" << timer.elapsed() << "ms)";
+        LOG_WARNING << "STOMP failed after " << config.maxIterations << " iterations ("
+                    << timer.elapsed() << "ms)";
         throw StompFailedException("STOMP failed to find collision-free solution");
     }
     _path.clear();
@@ -591,21 +599,33 @@ bool MotionGenerator::finalizeSTOMPResult(
         if (i == 0) {
             for (int d = 0; d < config.numJoints; ++d) {
                 point.velocity[d] = (finalTheta(1, d) - finalTheta(0, d)) / dt;
-                point.acceleration[d] = (finalTheta(2, d) - 2 * finalTheta(1, d) + finalTheta(0, d)) / (dt * dt);
+                point.acceleration[d] = (finalTheta(2, d) - 2 * finalTheta(1, d) + finalTheta(0, d))
+                                        / (dt * dt);
             }
         } else if (i == N - 1) {
             for (int d = 0; d < config.numJoints; ++d) {
                 point.velocity[d] = (finalTheta(N - 1, d) - finalTheta(N - 2, d)) / dt;
-                point.acceleration[d] = (finalTheta(N - 1, d) - 2 * finalTheta(N - 2, d) + finalTheta(N - 3, d)) / (dt * dt);
+                point.acceleration[d] = (finalTheta(N - 1, d) - 2 * finalTheta(N - 2, d)
+                                         + finalTheta(N - 3, d))
+                                        / (dt * dt);
             }
         } else {
             for (int d = 0; d < config.numJoints; ++d) {
                 point.velocity[d] = (finalTheta(i + 1, d) - finalTheta(i - 1, d)) / (2 * dt);
-                point.acceleration[d] = (finalTheta(i + 1, d) - 2 * finalTheta(i, d) + finalTheta(i - 1, d)) / (dt * dt);
+                point.acceleration[d] = (finalTheta(i + 1, d) - 2 * finalTheta(i, d)
+                                         + finalTheta(i - 1, d))
+                                        / (dt * dt);
             }
         }
         _path.push_back(point);
     }
+    
+    // Final constraint validation
+    if (!isTrajectoryValid(finalTheta, dt)) {
+        LOG_WARNING << "Final trajectory violates velocity/acceleration constraints";
+        throw StompFailedException("STOMP result violates kinematic constraints");
+    }
+    
     return state.success;
 }
 Eigen::MatrixXd MotionGenerator::smoothTrajectoryUpdate(const Eigen::MatrixXd &dTheta)
@@ -619,11 +639,11 @@ Eigen::MatrixXd MotionGenerator::initializeTrajectory(Eigen::Matrix<double, 7, 1
                                                       const int D)
 {
     Eigen::MatrixXd theta = Eigen::MatrixXd::Zero(N, D);
-    double start_index = 0;   
-    double end_index = N - 1; 
-    double T[6]; 
+    double start_index = 0;
+    double end_index = N - 1;
+    double T[6];
     T[0] = 1.0;
-    T[1] = (end_index - start_index); 
+    T[1] = (end_index - start_index);
     for (int i = 2; i <= 5; ++i)
         T[i] = T[i - 1] * T[1];
     Eigen::MatrixXd coeff = Eigen::MatrixXd::Zero(D, 6);
@@ -638,7 +658,7 @@ Eigen::MatrixXd MotionGenerator::initializeTrajectory(Eigen::Matrix<double, 7, 1
         coeff(d, 5) = (-12 * x0 + 12 * x1) / (2 * T[5]);
     }
     for (int i = 0; i < N; ++i) {
-        double t[6]; 
+        double t[6];
         t[0] = 1.0;
         t[1] = i - start_index;
         for (int k = 2; k <= 5; ++k)
@@ -742,9 +762,9 @@ double ObstacleCostCalculator::computeCost(const Eigen::MatrixXd &trajectory, do
                                          + halfDims.z() * axes.col(2);
                 radius = std::max(radius, corner.norm());
             }
-            if (grid_i >= 0 && grid_i < _sdf.size() && !_sdf.empty() && 
-                grid_j >= 0 && grid_j < _sdf[0].size() && !_sdf[0].empty() &&
-                grid_k >= 0 && grid_k < _sdf[0][0].size()) {
+            if (grid_i >= 0 && grid_i < _sdf.size() && !_sdf.empty() && grid_j >= 0
+                && grid_j < _sdf[0].size() && !_sdf[0].empty() && grid_k >= 0
+                && grid_k < _sdf[0][0].size()) {
                 double dist = _sdf[grid_i][grid_j][grid_k];
                 cost += std::max(radius - dist, 0.0) * ((center - centerOld) / dt).norm();
             }
@@ -790,12 +810,12 @@ double ConstraintCostCalculator::computeCost(const Eigen::MatrixXd &trajectory, 
     }
     for (int i = 0; i < N - 1; ++i) {
         for (int j = 0; j < D; ++j) {
-            cost += 0.1 * std::max(0., std::abs(velocity(i, j)) - _maxJointVelocities[j]);
+            cost += std::max(0., std::abs(velocity(i, j)) - _maxJointVelocities[j]);
         }
     }
     for (int i = 0; i < N - 2; ++i) {
         for (int j = 0; j < D; ++j) {
-            cost += 0.1 * std::max(0., std::abs(acceleration(i, j)) - _maxJointAccelerations[j]);
+            cost += std::max(0., std::abs(acceleration(i, j)) - _maxJointAccelerations[j]);
         }
     }
     return cost;
@@ -814,7 +834,7 @@ double CompositeCostCalculator::computeCost(const Eigen::MatrixXd &trajectory, d
     }
     return totalCost;
 }
-void MotionGenerator::initializeCostCalculator()
+void MotionGenerator::initializeCostCalculator(const StompConfig &config)
 {
     _costCalculator = std::make_unique<CompositeCostCalculator>();
     _costCalculator->addCostCalculator(std::make_unique<ObstacleCostCalculator>(_arm,
@@ -824,6 +844,7 @@ void MotionGenerator::initializeCostCalculator()
                                                                                 _sdfMaxPoint,
                                                                                 _sdfResolution),
                                        1.0);
+    // Constraint cost calculator removed - using explicit constraint validation instead
 }
 void MotionGenerator::initializeCostCalculatorCheckpoints(
     const std::vector<Eigen::VectorXd> &checkpoints)
@@ -929,7 +950,7 @@ std::vector<MotionGenerator::TrajectoryPoint> MotionGenerator::generateTrajector
             b << qf - q0 - v0 * T - 0.5 * a0 * T2, vf - v0 - a0 * T, af - a0;
             Eigen::Vector3d x = A.colPivHouseholderQr().solve(b);
             c[3] = x[0];
-            c[4] = x[1]; 
+            c[4] = x[1];
             c[5] = x[2];
             coeffs[j][i] = c;
         }
@@ -965,4 +986,56 @@ std::vector<MotionGenerator::TrajectoryPoint> MotionGenerator::generateTrajector
         trajectory.push_back(pt);
     }
     return trajectory;
+}
+bool MotionGenerator::isTrajectoryValid(const Eigen::MatrixXd &trajectory, double dt) const
+{
+    int N = trajectory.rows();
+    int D = trajectory.cols();
+    for (int i = 0; i < N - 1; ++i) {
+        for (int j = 0; j < D; ++j) {
+            double velocity = (trajectory(i + 1, j) - trajectory(i, j)) / dt;
+            if (std::abs(velocity) > _maxJointVelocities[j]) {
+                return false;
+            }
+        }
+    }
+    for (int i = 0; i < N - 2; ++i) {
+        for (int j = 0; j < D; ++j) {
+            double velocity_curr = (trajectory(i + 1, j) - trajectory(i, j)) / dt;
+            double velocity_next = (trajectory(i + 2, j) - trajectory(i + 1, j)) / dt;
+            double acceleration = (velocity_next - velocity_curr) / dt;
+            if (std::abs(acceleration) > _maxJointAccelerations[j]) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+bool MotionGenerator::isTrajectoryValidWithMargin(const Eigen::MatrixXd &trajectory,
+                                                  double dt,
+                                                  double velocityMargin,
+                                                  double accelerationMargin) const
+{
+    int N = trajectory.rows();
+    int D = trajectory.cols();
+    for (int i = 0; i < N - 1; ++i) {
+        for (int j = 0; j < D; ++j) {
+            double velocity = (trajectory(i + 1, j) - trajectory(i, j)) / dt;
+            if (std::abs(velocity) > _maxJointVelocities[j] * velocityMargin) {
+                return false;
+            }
+        }
+    }
+    for (int i = 0; i < N - 2; ++i) {
+        for (int j = 0; j < D; ++j) {
+            double velocity_curr = (trajectory(i + 1, j) - trajectory(i, j)) / dt;
+            double velocity_next = (trajectory(i + 2, j) - trajectory(i + 1, j)) / dt;
+            double acceleration = (velocity_next - velocity_curr) / dt;
+            if (std::abs(acceleration) > _maxJointAccelerations[j] * accelerationMargin) {
+                return false;
+            }
+        }
+    }
+    return true;
 }

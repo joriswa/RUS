@@ -62,6 +62,7 @@ struct EvaluationResult {
     double avgPlanningTime = 0.0;
     double avgPathLength = 0.0;
     double avgSmoothness = 0.0;
+    double avgClearance = 0.0;  // New metric for average path clearance
     double compositeScore = 0.0;
     int totalTrajectories = 0;
     std::string algorithm = "";
@@ -79,6 +80,7 @@ struct StompParameters {
     int numBestSamples = 16;  // Increased from 8 to 16 for better selection
     double obstacleCostWeight = 1.0;  // Weight for obstacle avoidance cost
     double constraintCostWeight = 1.0;  // Weight for constraint violation cost
+    std::vector<double> jointStdDevs = {0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1};  // Standard deviations for each joint
     
     static StompParameters fromYAML(const YAML::Node& node) {
         StompParameters params;
@@ -92,6 +94,20 @@ struct StompParameters {
             params.numBestSamples = stomp["num_best_samples"].as<int>(16);  // Increased default
             params.obstacleCostWeight = stomp["obstacle_cost_weight"].as<double>(1.0);
             params.constraintCostWeight = stomp["constraint_cost_weight"].as<double>(1.0);
+            
+            // Parse joint standard deviations
+            if (stomp["joint_std_devs"]) {
+                params.jointStdDevs.clear();
+                for (const auto& stdDev : stomp["joint_std_devs"]) {
+                    params.jointStdDevs.push_back(stdDev.as<double>());
+                }
+                // Ensure we have exactly 7 values for the 7-DOF robot
+                if (params.jointStdDevs.size() != 7) {
+                    std::cerr << "Warning: Expected 7 joint std devs, got " << params.jointStdDevs.size() 
+                              << ". Using default values." << std::endl;
+                    params.jointStdDevs = {0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1};
+                }
+            }
         }
         return params;
     }
@@ -150,6 +166,74 @@ std::vector<std::pair<int, int>> generateRandomPairs(int numPoses, int numPairs)
     }
     
     return pairs;
+}
+
+/**
+ * @brief Compute average clearance over a trajectory path
+ */
+double computeAverageClearance(const std::vector<MotionGenerator::TrajectoryPoint>& path, 
+                              RobotArm* arm, 
+                              std::shared_ptr<BVHTree> obstacleTree,
+                              int interpolationPoints = 5) {
+    if (path.size() < 2 || !obstacleTree) {
+        return 0.0;  // No path or no obstacle tree
+    }
+    
+    std::vector<double> clearanceValues;
+    
+    // For each segment in the path, interpolate and compute clearance
+    for (size_t i = 0; i < path.size() - 1; ++i) {
+        // Convert std::vector<double> to Eigen::VectorXd for interpolation
+        Eigen::VectorXd startJoints = Eigen::Map<const Eigen::VectorXd>(path[i].position.data(), path[i].position.size());
+        Eigen::VectorXd endJoints = Eigen::Map<const Eigen::VectorXd>(path[i+1].position.data(), path[i+1].position.size());
+        
+        // Interpolate between waypoints
+        for (int j = 0; j <= interpolationPoints; ++j) {
+            double t = static_cast<double>(j) / interpolationPoints;
+            Eigen::VectorXd interpJoints = (1.0 - t) * startJoints + t * endJoints;
+            
+            // Set joint configuration and compute forward kinematics
+            arm->setJointAngles(interpJoints);
+            
+            // Get end-effector position (main point to check clearance for)
+            Eigen::Vector3d endEffectorPos = arm->getEndeffectorPose().translation();
+            
+            // Query minimum distance to obstacles using BVHTree
+            auto [distance, gradient] = obstacleTree->getDistanceAndGradient(endEffectorPos);
+            clearanceValues.push_back(distance);
+            
+            // Optional: Also check other critical robot links (shoulder, elbow, wrist)
+            // This gives a more comprehensive clearance assessment
+            try {
+                // Get positions of key robot links if available
+                std::vector<Eigen::Vector3d> linkPositions;
+                
+                // Try to get link positions - these methods may not exist, so wrap in try-catch
+                // linkPositions.push_back(arm->getLinkPosition(3));  // Shoulder
+                // linkPositions.push_back(arm->getLinkPosition(5));  // Elbow
+                // linkPositions.push_back(arm->getLinkPosition(6));  // Wrist
+                
+                for (const auto& linkPos : linkPositions) {
+                    auto [linkDistance, linkGradient] = obstacleTree->getDistanceAndGradient(linkPos);
+                    clearanceValues.push_back(linkDistance);
+                }
+            } catch (...) {
+                // Link position methods not available - just use end-effector
+            }
+        }
+    }
+    
+    // Compute average clearance
+    if (clearanceValues.empty()) {
+        return 0.0;
+    }
+    
+    double totalClearance = 0.0;
+    for (double clearance : clearanceValues) {
+        totalClearance += clearance;
+    }
+    
+    return totalClearance / clearanceValues.size();
 }
 
 /**
@@ -220,6 +304,12 @@ EvaluationResult evaluateSTOMPTrajectories(const StompParameters& params,
         stompConfig.numBestSamples = params.numBestSamples;
         stompConfig.obstacleCostWeight = params.obstacleCostWeight;
         stompConfig.constraintCostWeight = params.constraintCostWeight;
+        
+        // Set joint standard deviations from optimized parameters
+        stompConfig.jointStdDevs = Eigen::VectorXd(7);
+        for (int i = 0; i < 7; ++i) {
+            stompConfig.jointStdDevs(i) = params.jointStdDevs[i];
+        }
         
         std::cout << "DEBUG: Loaded " << poses.size() << " poses" << std::endl;
         std::cout << "DEBUG: Sample poses:" << std::endl;
@@ -320,6 +410,7 @@ EvaluationResult evaluateSTOMPTrajectories(const StompParameters& params,
         double totalPlanningTime = 0.0;
         double totalPathLength = 0.0;
         double totalSmoothness = 0.0;
+        double totalClearance = 0.0;  // Track total clearance for averaging
         
         for (size_t i = 0; i < validPairs.size(); ++i) {
             const auto& validPair = validPairs[i];
@@ -396,9 +487,13 @@ EvaluationResult evaluateSTOMPTrajectories(const StompParameters& params,
                 }
                 totalSmoothness += smoothness;
                 
+                // Calculate average clearance over the path
+                double clearance = computeAverageClearance(path, arm, obstacleTree, 3);  // 3 interpolation points per segment
+                totalClearance += clearance;
+                
                 std::cout << " ✅ SUCCESS (" << std::fixed << std::setprecision(0) << planningTime 
                           << "ms, " << path.size() << " waypoints, length=" << std::setprecision(2) 
-                          << pathLength << ")" << std::endl;
+                          << pathLength << ", clearance=" << std::setprecision(3) << clearance << "m)" << std::endl;
             } else {
                 std::cout << " ❌ FAILED (" << std::fixed << std::setprecision(0) << planningTime << "ms)" << std::endl;
             }
@@ -434,15 +529,17 @@ EvaluationResult evaluateSTOMPTrajectories(const StompParameters& params,
                 result.avgPlanningTime = totalPlanningTime / successCount;
                 result.avgPathLength = totalPathLength / successCount;
                 result.avgSmoothness = totalSmoothness / successCount;
+                result.avgClearance = totalClearance / successCount;
             }
             
-            // Composite objective (lower is better) - only meaningful if we had valid poses to evaluate
+            // Composite objective (lower is better) - only meaningful if we had valid poses to evaluate  
             double timeScore = (successCount > 0) ? result.avgPlanningTime / 1000.0 : 1.0;  // Normalize to ~0.1-1.0
             double successScore = (1.0 - result.successRate) * 2.0;  // Penalty for failures
-            double lengthScore = (successCount > 0) ? std::min(2.0, result.avgPathLength / 3.0) : 1.0;  // Penalty for long paths
-            double smoothScore = (successCount > 0) ? (1.0 - result.avgSmoothness) : 1.0;  // Penalty for rough paths
+            double clearanceScore = (successCount > 0) ? std::max(0.0, (0.1 - result.avgClearance) * 10.0) : 1.0;  // Penalty for low clearance (target: >0.1m)
             
-            result.compositeScore = 0.4 * timeScore + 0.3 * successScore + 0.2 * lengthScore + 0.1 * smoothScore;
+            // Simplified composite score - disregard path length and smoothness
+            // Focus on: planning time (40%), success rate (40%), clearance (20%)
+            result.compositeScore = 0.4 * timeScore + 0.4 * successScore + 0.2 * clearanceScore;
         } else {
             // No valid pose pairs found - high penalty
             result.compositeScore = 10.0;  // High penalty for no valid poses
@@ -470,6 +567,7 @@ void saveResultsToJSON(const EvaluationResult& result, const std::string& filena
     jsonResult["avg_planning_time_ms"] = result.avgPlanningTime;
     jsonResult["avg_path_length"] = result.avgPathLength;
     jsonResult["avg_smoothness"] = result.avgSmoothness;
+    jsonResult["avg_clearance"] = result.avgClearance;  // Include clearance in JSON output
     jsonResult["composite_score"] = result.compositeScore;
     jsonResult["total_trajectories"] = result.totalTrajectories;
     
@@ -524,6 +622,12 @@ int main(int argc, char* argv[]) {
         std::cout << "  N (trajectory points): " << stompParams.N << std::endl;
         std::cout << "  Obstacle Cost Weight: " << stompParams.obstacleCostWeight << std::endl;
         std::cout << "  Constraint Cost Weight: " << stompParams.constraintCostWeight << std::endl;
+        std::cout << "  Joint Std Devs: [";
+        for (size_t i = 0; i < stompParams.jointStdDevs.size(); ++i) {
+            std::cout << stompParams.jointStdDevs[i];
+            if (i < stompParams.jointStdDevs.size() - 1) std::cout << ", ";
+        }
+        std::cout << "]" << std::endl;
         
         // Evaluate trajectories
         int numTrajectoryPairs = config["evaluation"]["trajectory_pairs"].as<int>(20);
@@ -536,6 +640,7 @@ int main(int argc, char* argv[]) {
         std::cout << "  Avg Planning Time: " << result.avgPlanningTime << "ms" << std::endl;
         std::cout << "  Avg Path Length: " << result.avgPathLength << std::endl;
         std::cout << "  Avg Smoothness: " << result.avgSmoothness << std::endl;
+        std::cout << "  Avg Clearance: " << result.avgClearance << "m" << std::endl;
         std::cout << "  Composite Score: " << result.compositeScore << std::endl;
         
         // Save results

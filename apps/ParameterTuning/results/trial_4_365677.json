@@ -1,0 +1,13 @@
+{
+  "algorithm" : "STOMP",
+  "avg_clearance" : 0.056976282733175912,
+  "avg_constraint_violations" : 7.6213736097896501e-05,
+  "avg_path_length" : 1.5686848720613984,
+  "avg_planning_time_ms" : 2839.3577794285711,
+  "avg_smoothness" : 0.99996189313195105,
+  "collision_risk_score" : 0.625,
+  "composite_score" : 1.0697809640186824,
+  "success_rate" : 0.875,
+  "timestamp" : 1753812394,
+  "total_trajectories" : 8
+}

@@ -1,6 +1,24 @@
 #!/usr/bin/env python3
 """
-Intelligent STOMP Parameter Optimization using Optuna
+Intelligent STOMP Paramet        # Define parameter search space with higher parameter counts for exploration
+        params = {
+            'temperature': trial.suggest_float('temperature', 5.0, 35.0, log=False),
+            'learning_rate': trial.suggest_float('learning_rate', 0.1, 0.6, log=False),
+            'max_iterations': trial.suggest_int('max_iterations', 50, 300, step=10),  # Extended iterations
+            'N': trial.suggest_int('N', 50, 150, step=5),  # Higher trajectory resolution
+            'num_noisy_trajectories': trial.suggest_int('num_noisy_trajectories', 16, 60, step=4),  # More exploration
+            'num_best_samples': trial.suggest_int('num_best_samples', 4, 20, step=2),  # More exploitation
+            'obstacle_cost_weight': trial.suggest_float('obstacle_cost_weight', 0.5, 5.0, log=False),  # Higher cost weights
+            'constraint_cost_weight': trial.suggest_float('constraint_cost_weight', 0.5, 5.0, log=False),
+            # Joint standard deviations - optimize each joint independently
+            'joint_std_dev_0': trial.suggest_float('joint_std_dev_0', 0.02, 0.15, log=False),  # Joint 0
+            'joint_std_dev_1': trial.suggest_float('joint_std_dev_1', 0.02, 0.15, log=False),  # Joint 1
+            'joint_std_dev_2': trial.suggest_float('joint_std_dev_2', 0.02, 0.15, log=False),  # Joint 2
+            'joint_std_dev_3': trial.suggest_float('joint_std_dev_3', 0.02, 0.15, log=False),  # Joint 3
+            'joint_std_dev_4': trial.suggest_float('joint_std_dev_4', 0.02, 0.15, log=False),  # Joint 4
+            'joint_std_dev_5': trial.suggest_float('joint_std_dev_5', 0.02, 0.15, log=False),  # Joint 5
+            'joint_std_dev_6': trial.suggest_float('joint_std_dev_6', 0.02, 0.15, log=False),  # Joint 6
+        }tion using Optuna
 Uses Bayesian optimization to efficiently find optimal STOMP parameters
 """
 
@@ -56,8 +74,8 @@ class STOMPParameterOptimizer:
             'learning_rate': trial.suggest_float('learning_rate', 0.1, 0.6, log=False),
             'max_iterations': trial.suggest_int('max_iterations', 50, 300, step=10),  # Extended iterations
             'N': trial.suggest_int('N', 50, 150, step=5),  # Higher trajectory resolution
-            'num_noisy_trajectories': trial.suggest_int('num_noisy_trajectories', 16, 60, step=4),  # More exploration
-            'num_best_samples': trial.suggest_int('num_best_samples', 4, 20, step=2),  # More exploitation
+            'num_noisy_trajectories': trial.suggest_int('num_noisy_trajectories', 4, 32, step=4),  # More exploration
+            'num_best_samples': trial.suggest_int('num_best_samples', 2, 8, step=2),  # More exploitation
             'obstacle_cost_weight': trial.suggest_float('obstacle_cost_weight', 0.5, 5.0, log=False),  # Higher cost weights
             'constraint_cost_weight': trial.suggest_float('constraint_cost_weight', 0.5, 5.0, log=False),
         }
@@ -83,6 +101,7 @@ stomp:
   num_best_samples: {params['num_best_samples']}
   obstacle_cost_weight: {params['obstacle_cost_weight']}
   constraint_cost_weight: {params['constraint_cost_weight']}
+  joint_std_devs: [{params['joint_std_dev_0']}, {params['joint_std_dev_1']}, {params['joint_std_dev_2']}, {params['joint_std_dev_3']}, {params['joint_std_dev_4']}, {params['joint_std_dev_5']}, {params['joint_std_dev_6']}]
 
 evaluation:
   trajectory_pairs: {trajectory_pairs}
@@ -215,6 +234,7 @@ stomp:
   num_best_samples: {best_trial.params['num_best_samples']}
   obstacle_cost_weight: {best_trial.params['obstacle_cost_weight']}
   constraint_cost_weight: {best_trial.params['constraint_cost_weight']}
+  joint_std_devs: [{best_trial.params['joint_std_dev_0']}, {best_trial.params['joint_std_dev_1']}, {best_trial.params['joint_std_dev_2']}, {best_trial.params['joint_std_dev_3']}, {best_trial.params['joint_std_dev_4']}, {best_trial.params['joint_std_dev_5']}, {best_trial.params['joint_std_dev_6']}]
 
 evaluation:
   trajectory_pairs: 20  # Use more pairs for final validation
@@ -272,6 +292,7 @@ stomp:
   num_best_samples: {best_params['num_best_samples']}
   obstacle_cost_weight: {best_params['obstacle_cost_weight']}
   constraint_cost_weight: {best_params['constraint_cost_weight']}
+  joint_std_devs: [{best_params['joint_std_dev_0']}, {best_params['joint_std_dev_1']}, {best_params['joint_std_dev_2']}, {best_params['joint_std_dev_3']}, {best_params['joint_std_dev_4']}, {best_params['joint_std_dev_5']}, {best_params['joint_std_dev_6']}]
 
 evaluation:
   trajectory_pairs: 15

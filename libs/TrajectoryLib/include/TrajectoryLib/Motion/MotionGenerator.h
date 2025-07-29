@@ -79,20 +79,21 @@ private:
  */
 struct StompConfig
 {
-    int numNoisyTrajectories = 12;          ///< Number of noisy trajectory samples per iteration
-    int numBestSamples = 6;                ///< Number of best samples to use for updates
-    int maxIterations = 250;               ///< Maximum optimization iterations
-    int N = 75;                           ///< Number of trajectory points
+    int numNoisyTrajectories = 6;         ///< Number of noisy trajectory samples per iteration (optimized)
+    int numBestSamples = 2;               ///< Number of best samples to use for updates (optimized)
+    int maxIterations = 250;              ///< Maximum optimization iterations (as requested)
+    int N = 75;                          ///< Number of trajectory points (optimized)
     double dt = 0.1;                     ///< Time step for trajectory discretization
-    double learningRate = 0.1;          ///< Learning rate for trajectory updates
-    double temperature = 15.9079;          ///< Temperature parameter for sample weighting
+    double learningRate = 0.2;  ///< Learning rate for trajectory updates (optimized)
+    double temperature = 29.19730655632339;    ///< Temperature parameter for sample weighting (optimized)
     int numJoints = 7;                     ///< Number of robot joints
     double outputFrequency = 1000.0;         ///< Output frequency in Hz for quintic polynomial fitting
-    double obstacleCostWeight = 1.0;       ///< Weight for obstacle cost in composite cost function
-    double constraintCostWeight = 1.0;     ///< Weight for constraint cost in composite cost function
+    double obstacleCostWeight = 3.3922501719988896;   ///< Weight for obstacle cost in composite cost function (optimized)
+    double constraintCostWeight = 1.5127165513794805; ///< Weight for constraint cost in composite cost function (optimized)
 
-    Eigen::VectorXd jointStdDevs           ///< Standard deviations for noise per joint
-        = 0.2 * (Eigen::VectorXd(7) << 1., 0.8, 1.0, 0.8, 0.4, 0.4, 0.4).finished();
+    Eigen::VectorXd jointStdDevs           ///< Standard deviations for noise per joint (optimized for each joint)
+        = (Eigen::VectorXd(7) << 0.0582353615703828, 0.14668808475499745, 0.05331246561043284, 
+           0.03724312604141198, 0.12453173853526511, 0.11152195769103804, 0.05073588645024437).finished();
 
     bool enableEarlyStopping = false;      ///< Enable early stopping when collision-free trajectory found
     int earlyStoppingPatience = 1;         ///< Number of consecutive collision-free iterations before stopping
@@ -348,6 +349,25 @@ public:
      */
     void saveTrajectoryToCSV(const std::string &filename);
 
+    /**
+     * @brief Check if trajectory satisfies velocity and acceleration constraints
+     * @param trajectory Joint space trajectory matrix (N x DOF)
+     * @param dt Time step between trajectory points
+     * @return True if all constraints are satisfied
+     */
+    bool isTrajectoryValid(const Eigen::MatrixXd &trajectory, double dt) const;
+
+    /**
+     * @brief Check if trajectory satisfies constraints with safety margins
+     * @param trajectory Joint space trajectory matrix (N x DOF) 
+     * @param dt Time step between trajectory points
+     * @param velocityMargin Velocity limit multiplier (e.g., 1.5 for 50% margin)
+     * @param accelerationMargin Acceleration limit multiplier (e.g., 1.5 for 50% margin)
+     * @return True if all constraints are satisfied within margins
+     */
+    bool isTrajectoryValidWithMargin(const Eigen::MatrixXd &trajectory, double dt, 
+                                     double velocityMargin, double accelerationMargin) const;
+
 private:
     /**
      * @brief State tracking for STOMP convergence and early stopping
@@ -409,7 +429,11 @@ private:
     Eigen::MatrixXd generateNoisyTrajectory(const Eigen::MatrixXd &baseTrajectory,
                                             const Eigen::VectorXd &stdDevs,
                                             const std::vector<std::pair<double, double>> &limits);
-    void initializeCostCalculator();
+    /**
+     * @brief Initialize cost calculator with configuration weights
+     * @param config STOMP configuration containing cost weights
+     */
+    void initializeCostCalculator(const StompConfig &config);
     void initializeCostCalculatorCheckpoints(const std::vector<Eigen::VectorXd> &checkpoints);
 
     // STOMP helper methods

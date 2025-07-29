@@ -1,24 +1,25 @@
 # Optimal STOMP parameters found by Optuna optimization
-# Trial 29 - Composite Score: 2.1201
+# Trial 13 - Composite Score: 0.3339
 csv_file: "/Users/joris/Uni/MA/Code/PathPlanner_US_wip/apps/ParameterTuning/Data/Ext_Ant_Scan/scan_pose_list_ee.csv"
 obstacles_file: "/Users/joris/Uni/MA/Code/PathPlanner_US_wip/apps/ParameterTuning/Data/Ext_Ant_Scan/obstacles.xml"
 urdf_file: "/Users/joris/Uni/MA/Code/PathPlanner_US_wip/res/scenario_1/panda_US.urdf"
 output_file: "optimal_results.json"
 
 stomp:
-  temperature: 16.98095545703236
-  learning_rate: 0.5215232058642698
-  max_iterations: 70
-  N: 70
-  num_noisy_trajectories: 28
-  num_best_samples: 10
-  obstacle_cost_weight: 3.165084464152532
-  constraint_cost_weight: 2.498454879702484
+  temperature: 29.19730655632339
+  learning_rate: 0.5859788504723047
+  max_iterations: 50
+  N: 110
+  num_noisy_trajectories: 16
+  num_best_samples: 2
+  obstacle_cost_weight: 3.3922501719988896
+  constraint_cost_weight: 1.5127165513794805
+  joint_std_devs: [0.0582353615703828, 0.14668808475499745, 0.05331246561043284, 0.03724312604141198, 0.12453173853526511, 0.11152195769103804, 0.05073588645024437]
 
 evaluation:
   trajectory_pairs: 20  # Use more pairs for final validation
 
 # Performance metrics:
 # Success Rate: 1.0
-# Avg Planning Time: 4858.993307375ms
-# Composite Score: 2.1201
+# Avg Planning Time: 520.788047ms
+# Composite Score: 0.3339
