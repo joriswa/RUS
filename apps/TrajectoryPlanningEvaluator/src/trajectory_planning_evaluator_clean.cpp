@@ -620,7 +620,7 @@ EvaluationConfig TrajectoryPlanningEvaluator::generateParameterSweepConfig() {
         for (int iter : max_iterations) {
             for (double lr : learning_rates) {
                 // Use optimized parameters as baseline, only override for research sweep
-                StompConfig stomp_config = StompConfig::optimized();
+                StompConfig stomp_config;
                 
                 // Override only the parameters being swept for research
                 stomp_config.numNoisyTrajectories = noisy;

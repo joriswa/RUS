@@ -211,7 +211,7 @@ EvaluationResult evaluateSTOMPTrajectories(const StompParameters& params,
         pathPlanner->setStartPose(startArm);
         
                 // Create STOMP configuration with parameters to optimize - use optimized config
-        StompConfig stompConfig = StompConfig::optimized();
+        StompConfig stompConfig;
         stompConfig.temperature = params.temperature;
         stompConfig.learningRate = params.learningRate;
         stompConfig.maxIterations = params.maxIterations;

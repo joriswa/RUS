@@ -384,7 +384,7 @@ std::vector<Trajectory> UltrasoundScanTrajectoryPlanner::planTrajectoryBatch(
                         const auto &targetJoints = requests[j].second;
                         
                         auto localGenerator = createMotionGeneratorWithSharedSdf(*_arm);
-                        auto config = StompConfig::optimized();
+                        StompConfig config;
 
                         Eigen::MatrixXd waypoints(2, startJoints.size());
                         waypoints.row(0) = startJoints.transpose();
@@ -417,7 +417,7 @@ std::vector<Trajectory> UltrasoundScanTrajectoryPlanner::planTrajectoryBatch(
                             step1Waypoints.row(1) = _currentJoints.transpose();
                             step1Generator->setWaypoints(step1Waypoints);
 
-                            auto fallBackConfig = StompConfig::optimized();
+                            StompConfig fallBackConfig;
 
                             bool step1Success = false;
                             try {

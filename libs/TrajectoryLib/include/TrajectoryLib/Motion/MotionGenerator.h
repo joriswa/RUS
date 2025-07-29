@@ -75,29 +75,17 @@ private:
 };
 
 /**
- * @brief Configuration parameters for STOMP (Stochastic Trajectory Optimization for Motion Planning)
- * 
- * Contains all tunable parameters for the STOMP algorithm including sampling,
- * optimization, and output generation settings.
- * 
- * DEFAULT VALUES: All default values are scientifically optimized parameters that achieved
- * 42.9% performance improvement through multi-objective optimization research.
- * 
- * USAGE PATTERNS:
- * - StompConfig config;                    // Uses optimized defaults (RECOMMENDED)
- * - auto config = StompConfig::optimized(); // Explicit optimized config  
- * - auto config = StompConfig::fast();     // Faster execution, reduced quality
- * - auto config = StompConfig::quality();  // Higher quality, slower execution
+ * @brief Configuration parameters for STOMP trajectory optimization
  */
 struct StompConfig
 {
-    int numNoisyTrajectories = 12;          ///< Number of noisy trajectory samples per iteration (optimized)
-    int numBestSamples = 6;                ///< Number of best samples to use for updates (optimized)
-    int maxIterations = 250;               ///< Maximum optimization iterations (requested value)
+    int numNoisyTrajectories = 12;          ///< Number of noisy trajectory samples per iteration
+    int numBestSamples = 6;                ///< Number of best samples to use for updates
+    int maxIterations = 250;               ///< Maximum optimization iterations
     int N = 75;                           ///< Number of trajectory points
-    double dt = 0.1;                     ///< Time step for trajectory discretization (optimized)
-    double learningRate = 0.1;          ///< Learning rate for trajectory updates (optimized)
-    double temperature = 15.9079;          ///< Temperature parameter for sample weighting (optimized)
+    double dt = 0.1;                     ///< Time step for trajectory discretization
+    double learningRate = 0.1;          ///< Learning rate for trajectory updates
+    double temperature = 15.9079;          ///< Temperature parameter for sample weighting
     int numJoints = 7;                     ///< Number of robot joints
     double outputFrequency = 1000.0;         ///< Output frequency in Hz for quintic polynomial fitting
     double obstacleCostWeight = 1.0;       ///< Weight for obstacle cost in composite cost function
@@ -106,122 +94,9 @@ struct StompConfig
     Eigen::VectorXd jointStdDevs           ///< Standard deviations for noise per joint
         = 0.2 * (Eigen::VectorXd(7) << 1., 0.8, 1.0, 0.8, 0.4, 0.4, 0.4).finished();
 
-    // Early stopping configuration
     bool enableEarlyStopping = false;      ///< Enable early stopping when collision-free trajectory found
     int earlyStoppingPatience = 1;         ///< Number of consecutive collision-free iterations before stopping
-
-    // Time-based termination configuration
     double maxComputeTimeMs = 0.0;         ///< Maximum computation time in milliseconds (0 = no limit)
-
-    /**
-     * @brief Create configuration with scientifically optimized parameters
-     * 
-     * Returns STOMP configuration with parameters optimized through multi-objective
-     * optimization that achieved 42.9% performance improvement. USE THIS for best results.
-     * 
-     * @return StompConfig with optimized parameters
-     */
-    static StompConfig optimized() {
-        StompConfig config;
-        // Default constructor already uses optimized values
-        return config;
-    }
-
-    /**
-     * @brief Create configuration with early stopping enabled
-     * 
-     * Uses optimized parameters but enables early stopping for faster convergence
-     * when a collision-free trajectory is found.
-     * 
-     * @param patience Number of consecutive collision-free iterations before stopping
-     * @return StompConfig with early stopping enabled
-     */
-    static StompConfig withEarlyStopping(int patience = 1) {
-        StompConfig config;
-        config.enableEarlyStopping = true;
-        config.earlyStoppingPatience = patience;
-        return config;
-    }
-
-    /**
-     * @brief Create configuration optimized for faster execution
-     * 
-     * Reduces computational cost at expense of some trajectory quality.
-     * Suitable for real-time applications or initial prototyping.
-     * 
-     * @return StompConfig optimized for speed
-     */
-    static StompConfig fast() {
-        StompConfig config;
-        config.numNoisyTrajectories = 30;    // Reduced from optimized 84
-        config.numBestSamples = 4;           // Reduced from optimized 6
-        config.maxIterations = 100;          // Reduced from optimized 500
-        config.learningRate = 0.3;           // Increased for faster convergence
-        config.temperature = 12.0;           // Adjusted for reduced sampling
-        config.enableEarlyStopping = true;   // Enable early stopping for speed
-        config.earlyStoppingPatience = 1;    // Stop immediately when collision-free found
-        return config;
-    }
-
-    /**
-     * @brief Create configuration optimized for highest quality
-     * 
-     * Increases computational cost for maximum trajectory quality.
-     * Suitable for offline planning or critical applications.
-     * 
-     * @return StompConfig optimized for quality
-     */
-    static StompConfig quality() {
-        StompConfig config;
-        config.numNoisyTrajectories = 120;   // Increased from optimized 84
-        config.numBestSamples = 8;           // Increased from optimized 6
-        config.maxIterations = 800;          // Increased from optimized 500
-        config.learningRate = 0.15;          // Reduced for more careful updates
-        config.temperature = 18.0;           // Increased for broader exploration
-        return config;
-    }
-
-    /**
-     * @brief Create configuration for hybrid STOMP-BiRRT approach
-     * 
-     * Uses fast STOMP parameters with time limit for quick attempts.
-     * Designed to be used with BiRRT fallback when STOMP times out.
-     * 
-     * @param timeLimit Time limit in milliseconds (default: 3000ms)
-     * @return StompConfig optimized for hybrid planning
-     */
-    static StompConfig hybrid(double timeLimit = 3000.0) {
-        StompConfig config = fast();  // Start with fast configuration
-        config.maxComputeTimeMs = timeLimit;  // Add time limit
-        return config;
-    }
-
-    /**
-     * @brief Create configuration for research/testing with custom parameters
-     * 
-     * WARNING: Custom parameters may significantly reduce performance.
-     * Use optimized() for production code unless specific research needs require
-     * parameter exploration.
-     * 
-     * @param numNoisy Number of noisy trajectory samples
-     * @param numBest Number of best samples for updates
-     * @param maxIter Maximum iterations
-     * @param lr Learning rate
-     * @param temp Temperature parameter
-     * @param timeStep Time step dt
-     * @return StompConfig with custom parameters
-     */
-    static StompConfig custom(int numNoisy, int numBest, int maxIter, 
-                             double lr, double temp, double timeStep = 0.1097) {
-        StompConfig config;
-        config.numNoisyTrajectories = numNoisy;
-        config.numBestSamples = numBest;
-        config.maxIterations = maxIter;
-        config.learningRate = lr;
-        config.temperature = temp;
-        config.dt = timeStep;
-        return config;
-    }
 };
 
 /**
@@ -483,6 +358,39 @@ public:
     void saveTrajectoryToCSV(const std::string &filename);
 
 private:
+    /**
+     * @brief State tracking for STOMP convergence and early stopping
+     */
+    struct STOMPConvergenceState {
+        bool success = false;
+        Eigen::MatrixXd bestCollisionFreeTheta;
+        double bestCollisionFreeCost = std::numeric_limits<double>::max();
+        double prevTrajectoryCost = std::numeric_limits<double>::max();
+        int noChangeCounter = 0;
+        int earlyStoppingCounter = 0;
+        QElapsedTimer overallTimer;
+        
+        // Convergence parameters
+        static constexpr double costConvergenceThreshold = 1e-6;
+        static constexpr int convergencePatience = 3;
+        
+        STOMPConvergenceState() {
+            overallTimer.start();
+        }
+    };
+
+    /**
+     * @brief STOMP initialization data structure
+     */
+    struct STOMPInitData {
+        Eigen::MatrixXd theta;
+        boost::asio::thread_pool* pool;
+        std::unique_ptr<boost::asio::thread_pool> localPool;
+        int N;
+        double dt;
+        std::vector<std::pair<double, double>> limits;
+    };
+
     std::unique_ptr<CompositeCostCalculator> _costCalculator;
     std::vector<TrajectoryPoint> _path;
     std::vector<double> _maxJointVelocities = std::vector<double>(7, .4);
@@ -498,6 +406,7 @@ private:
     double _sdfResolution;
     bool _sdfInitialized = false;
 
+    // Original helper methods
     void generateInitialTrajectory();
     void convertToTimeOptimal();
     void initializeMatrices(const int &N, const double &dt);
@@ -511,6 +420,51 @@ private:
                                             const std::vector<std::pair<double, double>> &limits);
     void initializeCostCalculator();
     void initializeCostCalculatorCheckpoints(const std::vector<Eigen::VectorXd> &checkpoints);
+
+    // Refactored STOMP helper methods
+    STOMPInitData initializeSTOMPExecution(const StompConfig &config,
+                                           std::shared_ptr<boost::asio::thread_pool> sharedPool);
+    std::vector<Eigen::MatrixXd> generateNoisySamples(const StompConfig &config,
+                                                      const Eigen::MatrixXd &theta,
+                                                      const std::vector<std::pair<double, double>> &limits,
+                                                      const std::vector<std::pair<Eigen::MatrixXd, double>> &bestSamples,
+                                                      boost::asio::thread_pool* pool);
+    std::pair<std::vector<double>, Eigen::VectorXd> evaluateTrajectories(
+        const std::vector<Eigen::MatrixXd> &trajectories,
+        const StompConfig &config,
+        double dt,
+        boost::asio::thread_pool* pool);
+    void updateBestSamples(const std::vector<Eigen::MatrixXd> &trajectories,
+                           const std::vector<double> &costs,
+                           std::vector<std::pair<Eigen::MatrixXd, double>> &bestSamples,
+                           int numBestSamples);
+    Eigen::MatrixXd applyTrajectoryUpdate(const Eigen::MatrixXd &theta,
+                                          const std::vector<Eigen::MatrixXd> &noisyTrajectories,
+                                          const Eigen::VectorXd &weights,
+                                          int numJoints,
+                                          int N,
+                                          const std::vector<std::pair<double, double>> &limits);
+    bool checkCollisions(const Eigen::MatrixXd &theta, int N);
+    void updateConvergenceState(STOMPConvergenceState &state,
+                                const Eigen::MatrixXd &theta,
+                                const StompConfig &config,
+                                int iteration,
+                                double dt,
+                                bool collisionFree);
+    bool checkTimeLimit(const StompConfig &config,
+                        const QElapsedTimer &timer,
+                        int iteration,
+                        bool success,
+                        double bestCost);
+    bool checkConvergence(const STOMPConvergenceState &state,
+                          const StompConfig &config,
+                          int iteration);
+    bool finalizeSTOMPResult(const Eigen::MatrixXd &theta,
+                             const STOMPConvergenceState &state,
+                             const StompConfig &config,
+                             int N,
+                             double dt,
+                             const QElapsedTimer &timer);
 };
 
 #endif // MOTIONGENERATOR_H

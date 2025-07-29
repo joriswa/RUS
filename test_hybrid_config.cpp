@@ -2,7 +2,10 @@
 #include "libs/TrajectoryLib/include/TrajectoryLib/Motion/MotionGenerator.h"
 
 int main() {
-    auto config = StompConfig::hybrid();
+    StompConfig config;
+    config.maxComputeTimeMs = 3000.0;
+    config.enableEarlyStopping = true;
+    config.earlyStoppingPatience = 1;
     std::cout << "Hybrid STOMP-BiRRT Configuration:" << std::endl;
     std::cout << "  Max iterations: " << config.maxIterations << std::endl;
     std::cout << "  Time limit (ms): " << config.maxComputeTimeMs << std::endl;
