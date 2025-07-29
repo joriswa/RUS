@@ -1,0 +1,42 @@
+<?xml version="1.0"?>
+<launch>
+    <!-- Arguments -->
+    <arg name="rviz_config" default="$(find RVizVisualization)/config/obstacle_visualization.rviz" />
+    <arg name="frame_id" default="base_link" />
+    <arg name="marker_topic" default="obstacle_markers" />
+    <arg name="publish_rate" default="5.0" />
+    <arg name="show_internal_nodes" default="false" />
+    
+    <!-- Start the obstacle visualizer node -->
+    <node name="obstacle_visualizer" pkg="RVizVisualization" type="obstacle_visualizer_node" output="screen">
+        <param name="frame_id" value="$(arg frame_id)" />
+        <param name="marker_topic" value="$(arg marker_topic)" />
+        <param name="publish_rate" value="$(arg publish_rate)" />
+        <param name="show_internal_nodes" value="$(arg show_internal_nodes)" />
+        
+        <!-- Color configuration -->
+        <rosparam>
+            obstacle_color:
+                r: 0.8
+                g: 0.2
+                b: 0.2
+                a: 0.8
+            bvh_color:
+                r: 0.2
+                g: 0.2
+                b: 0.8
+                a: 0.3
+        </rosparam>
+    </node>
+    
+    <!-- Start RViz with obstacle visualization config -->
+    <node name="rviz" pkg="rviz" type="rviz" args="-d $(arg rviz_config)" output="screen" />
+    
+    <!-- Optional: Start robot state publisher if needed -->
+    <!-- 
+    <node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher">
+        <param name="robot_description" command="$(find xacro)/xacro $(find your_robot_description)/urdf/robot.urdf.xacro" />
+    </node>
+    -->
+
+</launch>

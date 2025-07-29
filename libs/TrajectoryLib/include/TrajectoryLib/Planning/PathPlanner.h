@@ -310,6 +310,15 @@ public:
     PathPlanner();
 
     /**
+     * @brief Shortcut the path by removing unnecessary waypoints when direct connections are collision-free.
+     * This method iteratively tries to connect non-adjacent waypoints directly, removing intermediate
+     * waypoints if the direct path is collision-free. This reduces path length and execution time.
+     * @param maxIterations Maximum number of shortcutting iterations (default: 100)
+     * @param maxAttempts Maximum attempts per iteration to find shortcuts (default: 20)
+     */
+    void shortcutPath(int maxIterations = 100, int maxAttempts = 20);
+
+    /**
      * @brief Checks if the given arm configuration has a collision.
      * @param arm The robot arm to check.
      * @param inflate Whether to inflate the collision geometry.

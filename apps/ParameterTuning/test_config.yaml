@@ -1,0 +1,18 @@
+
+csv_file: "/Users/joris/Uni/MA/Code/PathPlanner_US_wip/res/scenario_1/scan_poses.csv"
+obstacles_file: "/Users/joris/Uni/MA/Code/PathPlanner_US_wip/res/scenario_1/obstacles.xml"
+urdf_file: "/Users/joris/Uni/MA/Code/PathPlanner_US_wip/res/scenario_1/panda_US.urdf"
+output_file: "test_results.json"
+
+stomp:
+  temperature: 15.0
+  learning_rate: 0.3
+  max_iterations: 500
+  N: 75
+  num_noisy_trajectories: 32
+  num_best_samples: 16
+  obstacle_cost_weight: 1.0
+  constraint_cost_weight: 1.0
+
+evaluation:
+  trajectory_pairs: 20

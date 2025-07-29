@@ -1,0 +1,10 @@
+{
+  "algorithm" : "STOMP",
+  "avg_path_length" : 1.0070494995893955,
+  "avg_planning_time_ms" : 5197.8634042000003,
+  "avg_smoothness" : 0.99995419759715742,
+  "composite_score" : 2.1462865752262443,
+  "success_rate" : 1.0,
+  "timestamp" : 1753610191,
+  "total_trajectories" : 10
+}

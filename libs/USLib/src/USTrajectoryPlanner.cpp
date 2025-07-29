@@ -1,44 +1,38 @@
 #include "USLib/USTrajectoryPlanner.h"
+#include <QDebug>
 #include "TrajectoryLib/Logger.h"
 #include "TrajectoryLib/Planning/PathPlanner.h"
-#include <QDebug>
-#include <fstream>
-#include <chrono>
-#include <iostream>
-#include <iomanip>
+#include <algorithm>
 #include <atomic>
 #include <boost/asio/post.hpp>
 #include <boost/asio/use_future.hpp>
+#include <chrono>
+#include <cmath>
+#include <fstream>
+#include <iomanip>
 
-UltrasoundScanTrajectoryPlanner::UltrasoundScanTrajectoryPlanner(const std::string &environmentString, 
-                                                               const std::vector<double> &currentJoints)
-    : _hardwareConfig(HardwareConfig::detect()), _environment(environmentString)
+UltrasoundScanTrajectoryPlanner::UltrasoundScanTrajectoryPlanner(const std::string &environmentString)
+    : _hardwareConfig(HardwareConfig::detect())
+    , _environment(environmentString)
 {
-    // Convert vector<double> to Eigen::VectorXd
-    _currentJoints = Eigen::Map<const Eigen::VectorXd>(currentJoints.data(), currentJoints.size());
-    
-    // Initialize the arm from the environment string (assumed to be URDF)
     _arm = new RobotArm(environmentString);
     _pathPlanner = new PathPlanner();
     _pathPlanner->setStartPose(*_arm);
     _motionGenerator = new MotionGenerator(*_arm);
-    
-    // Initialize hardware-optimized thread pool
+
     initializeThreadPool();
-    
-    LOG_INFO << "Hardware Config - Physical cores:" << _hardwareConfig.physicalCores 
-             << " Logical cores:" << _hardwareConfig.logicalCores
-             << " Optimal batch size:" << _hardwareConfig.batchSize;
+
+    LOG_INFO << "Hardware: " << _hardwareConfig.physicalCores
+             << " cores, batch size: " << _hardwareConfig.batchSize;
 }
 
 UltrasoundScanTrajectoryPlanner::~UltrasoundScanTrajectoryPlanner()
 {
-    // Ensure thread pool is properly shut down
     if (_sharedThreadPool) {
         _sharedThreadPool->join();
         _sharedThreadPool.reset();
     }
-    
+
     if (_arm) {
         delete _arm;
         _arm = nullptr;
@@ -83,40 +77,8 @@ void UltrasoundScanTrajectoryPlanner::setPoses(const std::vector<Eigen::Affine3d
     }
 }
 
-std::pair<std::vector<MotionGenerator::TrajectoryPoint>, bool>
-UltrasoundScanTrajectoryPlanner::planSingleStompTrajectory(const Eigen::VectorXd &startJoints,
-                                                           const Eigen::VectorXd &targetJoints,
-                                                           const StompConfig &config)
-{
-    try {
-        auto motionGen = new MotionGenerator(*_arm);
-        motionGen->setObstacleTree(_obstacleTree);
-
-        unsigned int numThreads = std::thread::hardware_concurrency();
-        auto threadPool = std::make_shared<boost::asio::thread_pool>(numThreads);
-
-        // Simple straight-line STOMP optimization
-        Eigen::MatrixXd waypoints(2, startJoints.size());
-        waypoints.row(0) = startJoints.transpose();
-        waypoints.row(1) = targetJoints.transpose();
-        motionGen->setWaypoints(waypoints);
-        
-        // Run STOMP optimization with straight-line initialization
-        motionGen->performSTOMP(config, threadPool);
-        LOG_INFO << "STOMP optimization succeeded for single trajectory";
-        
-        threadPool->join();
-
-        auto result = std::make_pair(motionGen->getPath(), false);
-        delete motionGen;
-        return result;
-    } catch (const std::exception &e) {
-        LOG_ERROR << "Exception in planSingleStompTrajectory: " << e.what();
-        throw;
-    }
-}
-
-bool UltrasoundScanTrajectoryPlanner::planTrajectories()
+bool UltrasoundScanTrajectoryPlanner::planTrajectories(bool useHauserForRepositioning,
+                                                       bool enableShortcutting)
 {
     if (_environment.empty()) {
         throw std::runtime_error("Environment string is not populated.");
@@ -132,37 +94,61 @@ bool UltrasoundScanTrajectoryPlanner::planTrajectories()
 
     _trajectories.clear();
 
-    unsigned int numThreads = std::thread::hardware_concurrency();
-    LOG_INFO << "Hardware threads available: " << numThreads;
-    std::shared_ptr<boost::asio::thread_pool> threadPool
-        = std::make_shared<boost::asio::thread_pool>(numThreads);
+    // Special case: single pose request - only return free movement trajectory
+    if (_poses.size() == 1) {
+        LOG_INFO << "Single pose request: planning direct movement trajectory";
+
+        auto checkpointResult = _pathPlanner->planCheckpoints(_poses, _currentJoints);
+        auto &checkpoints = checkpointResult.checkpoints;
+        size_t firstValidIndex = checkpointResult.firstValidIndex;
+
+        if (firstValidIndex >= checkpoints.size()) {
+            throw std::runtime_error("No valid checkpoint found for single pose request.");
+        }
+
+        // Extract target arm configuration
+        RobotArm targetArm = checkpoints[firstValidIndex].first;
+
+        // Plan single trajectory from current position to target pose
+        std::vector<std::pair<Eigen::VectorXd, Eigen::VectorXd>> singleRequest;
+        std::vector<std::string> singleDescription;
+
+        singleRequest.emplace_back(_currentJoints, targetArm.getJointAngles());
+        singleDescription.emplace_back("Single pose free movement: current -> pose 0");
+
+        std::vector<Trajectory> result;
+        if (useHauserForRepositioning) {
+            result = planTrajectoryBatchHauser(singleRequest, singleDescription, enableShortcutting);
+        } else {
+            result = planTrajectoryBatch(singleRequest, singleDescription, enableShortcutting);
+        }
+
+        if (!result.empty() && !result[0].empty()) {
+            std::vector<MotionGenerator::TrajectoryPoint> trajectoryPoints;
+            trajectoryPoints.reserve(result[0].size());
+
+            for (const auto &point : result[0]) {
+                trajectoryPoints.push_back(point);
+            }
+
+            _trajectories.emplace_back(trajectoryPoints, false); // Free movement = NOT contact force
+            LOG_INFO << "Single pose trajectory: " << trajectoryPoints.size() << " points";
+            return true;
+        } else {
+            LOG_ERROR << "Failed to plan single pose trajectory";
+            return false;
+        }
+    }
 
     auto checkpointResult = _pathPlanner->planCheckpoints(_poses, _currentJoints);
     auto &checkpoints = checkpointResult.checkpoints;
     auto &validSegments = checkpointResult.validSegments;
-    auto &jumpPairs = checkpointResult.jumpPairs;
     size_t firstValidIndex = checkpointResult.firstValidIndex;
 
     // Log the indices of the valid segments
-    LOG_INFO << "Valid segments identified:";
+    LOG_INFO << "Valid segments: " << validSegments.size();
     for (const auto &segment : validSegments) {
-        LOG_INFO << "  Segment: start=" << segment.first << " end=" << segment.second;
-    }
-
-    if (checkpoints.size() == 1) {
-        auto [arm, valid] = checkpoints[0];
-
-        if (!valid) {
-            throw std::runtime_error("Single checkpoint is invalid.");
-        }
-
-        StompConfig config = StompConfig::optimized(); // Use optimized STOMP configuration
-        config.maxComputeTimeMs = 0.0; // Remove time limit
-        // Simple straight-line STOMP optimization
-        
-        auto trajectory = planSingleStompTrajectory(_currentJoints, arm.getJointAngles(), config);
-        _trajectories.push_back(trajectory);
-        return true;
+        LOG_DEBUG << "Segment " << segment.first << "-" << segment.second;
     }
 
     // Validate that we have a valid starting point
@@ -170,162 +156,158 @@ bool UltrasoundScanTrajectoryPlanner::planTrajectories()
         throw std::runtime_error("No valid checkpoint found to start trajectory planning.");
     }
     if (firstValidIndex > 0) {
-        LOG_INFO << "First " << firstValidIndex 
-                 << " checkpoint(s) are invalid. Using first valid checkpoint at index: "
-                 << firstValidIndex;
+        LOG_INFO << "Using first valid checkpoint: " << firstValidIndex;
     }
 
+    // Extract arm configurations
     std::vector<RobotArm> arms;
     for (const auto &[arm, valid] : checkpoints) {
         arms.push_back(arm);
     }
 
-    std::vector<std::promise<std::pair<std::vector<MotionGenerator::TrajectoryPoint>, bool>>>
-        promises;
-    std::vector<std::future<std::pair<std::vector<MotionGenerator::TrajectoryPoint>, bool>>> futures;
-    size_t taskIndex = 0;
+    // Build repositioning trajectory requests for batch planning
+    std::vector<std::pair<Eigen::VectorXd, Eigen::VectorXd>> repositioningRequests;
+    std::vector<std::string> repositioningDescriptions; // Track what each repositioning is for
 
-    size_t numTasks = 1 + validSegments.size()
-                      + (validSegments.size() > 1 ? validSegments.size() - 1 : 0);
-    promises.resize(numTasks);
-    futures.reserve(numTasks);
+    // Add initial repositioning trajectory (current joints -> first valid checkpoint)
+    repositioningRequests.emplace_back(_currentJoints, arms[firstValidIndex].getJointAngles());
+    repositioningDescriptions.emplace_back("Initial repositioning: current -> pose "
+                                           + std::to_string(firstValidIndex));
 
-    for (auto &promise : promises) {
-        futures.push_back(promise.get_future());
+    // Add inter-segment repositioning trajectories
+    for (size_t segIdx = 0; segIdx + 1 < validSegments.size(); segIdx++) {
+        size_t currentEnd = validSegments[segIdx].second;
+        size_t nextStart = validSegments[segIdx + 1].first;
+
+        repositioningRequests.emplace_back(arms[currentEnd].getJointAngles(),
+                                           arms[nextStart].getJointAngles());
+        repositioningDescriptions.emplace_back("Inter-segment repositioning: pose "
+                                               + std::to_string(currentEnd) + " -> pose "
+                                               + std::to_string(nextStart));
     }
 
-    StompConfig config = StompConfig::optimized(); // Use optimized STOMP configuration
-    config.maxComputeTimeMs = 0.0; // Remove time limit
-    // Simple straight-line STOMP optimization
+    LOG_INFO << "Planning " << repositioningRequests.size() << " repositioning trajectories using "
+             << (useHauserForRepositioning ? "RRT+Hauser" : "STOMP");
 
-    boost::asio::dispatch(
-        *threadPool,
-        [this,
-         &arms,
-         firstValidIndex,
-         &promises,
-         taskIndex = taskIndex++,
-         threadPool,
-         config]() {
-            try {
-                auto motionGen = new MotionGenerator(*_arm);
-                motionGen->setObstacleTree(_obstacleTree);
+    // Use appropriate planning method for repositioning trajectories
+    std::vector<Trajectory> repositioningResults;
+    if (useHauserForRepositioning) {
+        repositioningResults = planTrajectoryBatchHauser(repositioningRequests,
+                                                         repositioningDescriptions,
+                                                         enableShortcutting);
+    } else {
+        repositioningResults = planTrajectoryBatch(repositioningRequests,
+                                                   repositioningDescriptions,
+                                                   enableShortcutting);
+    }
 
-                // Simple straight-line STOMP optimization
-                Eigen::MatrixXd waypoints(2, _currentJoints.size());
-                waypoints.row(0) = _currentJoints.transpose();
-                waypoints.row(1) = arms[firstValidIndex].getJointAngles().transpose();
-                motionGen->setWaypoints(waypoints);
-                
-                // Run STOMP optimization with straight-line initialization
-                motionGen->performSTOMP(config, threadPool);
-                LOG_INFO << "STOMP optimization succeeded for initial repositioning";
+    // Now build the final trajectory sequence in the correct order
+    size_t repositioningIndex = 0;
 
-                auto result = std::make_pair(motionGen->getPath(), false);
-                delete motionGen;
-                promises[taskIndex].set_value(result);
-            } catch (...) {
-                promises[taskIndex].set_exception(std::current_exception());
-            }
-        });
+    // 1. Add initial repositioning
+    if (repositioningIndex < repositioningResults.size()
+        && !repositioningResults[repositioningIndex].empty()) {
+        std::vector<MotionGenerator::TrajectoryPoint> trajectoryPoints;
+        trajectoryPoints.reserve(repositioningResults[repositioningIndex].size());
 
+        for (const auto &point : repositioningResults[repositioningIndex]) {
+            trajectoryPoints.push_back(point);
+        }
+
+        _trajectories.emplace_back(trajectoryPoints, false); // repositioning = NOT contact force
+        LOG_DEBUG << "Initial repositioning: " << trajectoryPoints.size() << " points";
+    } else {
+        LOG_ERROR << "Initial repositioning failed";
+        return false;
+    }
+    repositioningIndex++;
+
+    // 2. Add contact force trajectories for each valid segment, with inter-segment repositioning in between
     for (size_t segIdx = 0; segIdx < validSegments.size(); segIdx++) {
         size_t start = validSegments[segIdx].first;
         size_t end = validSegments[segIdx].second;
 
-        boost::asio::post(
-            *threadPool,
-            [this, &arms, start, end, &promises, taskIndex = taskIndex++, threadPool, config]() {
-                try {
-                    auto motionGen = new MotionGenerator(*_arm);
-                    motionGen->setObstacleTree(_obstacleTree);
+        // Add contact force trajectory for this segment
+        if (start == end) {
+            // Single point - add a minimal trajectory for contact force
+            std::vector<MotionGenerator::TrajectoryPoint> singlePoint;
+            MotionGenerator::TrajectoryPoint point;
+            point.time = 0.0;
 
-                    std::vector<Eigen::VectorXd> jointCheckpoints;
-                    for (size_t i = start; i <= end; i++) {
-                        jointCheckpoints.push_back(arms[i].getJointAngles());
-                    }
+            // Convert Eigen::VectorXd to std::vector<double>
+            auto jointAngles = arms[start].getJointAngles();
+            point.position.resize(jointAngles.size());
+            point.velocity.resize(jointAngles.size());
+            point.acceleration.resize(jointAngles.size());
 
-                    auto trajectoryPoints = motionGen->generateTrajectoryFromCheckpoints(
-                        jointCheckpoints);
-
-                    auto result = std::make_pair(trajectoryPoints, true);
-                    delete motionGen;
-                    promises[taskIndex].set_value(result);
-                } catch (...) {
-                    promises[taskIndex].set_exception(std::current_exception());
-                }
-            });
-
-        if (segIdx + 1 < validSegments.size()) {
-            size_t nextStart = validSegments[segIdx + 1].first;
-
-            boost::asio::post(
-                *threadPool,
-                [this,
-                 &arms,
-                 end,
-                 nextStart,
-                 &promises,
-                 taskIndex = taskIndex++,
-                 threadPool,
-                 config]() {
-                    try {
-                        auto motionGen = new MotionGenerator(*_arm);
-                        motionGen->setObstacleTree(_obstacleTree);
-
-                        // Simple straight-line STOMP optimization
-                        Eigen::MatrixXd waypoints(2, _currentJoints.size());
-                        waypoints.row(0) = arms[end].getJointAngles().transpose();
-                        waypoints.row(1) = arms[nextStart].getJointAngles().transpose();
-                        motionGen->setWaypoints(waypoints);
-                        
-                        // Run STOMP optimization with straight-line initialization
-                        motionGen->performSTOMP(config, threadPool);
-                        LOG_INFO << "STOMP optimization succeeded for inter-segment repositioning";
-
-                        auto result = std::make_pair(motionGen->getPath(), false);
-                        delete motionGen;
-                        promises[taskIndex].set_value(result);
-                    } catch (...) {
-                        promises[taskIndex].set_exception(std::current_exception());
-                    }
-                });
-        }
-    }
-
-    _trajectories.reserve(futures.size());
-    bool repositioningFailed = false;
-
-    // Collect trajectories in order and enforce continuity
-    std::vector<std::pair<std::vector<MotionGenerator::TrajectoryPoint>, bool>> sequentialTrajectories;
-    Eigen::VectorXd lastEndPosition;
-    bool hasLastEndPosition = false;
-
-    for (size_t i = 0; i < futures.size(); ++i) {
-        try {
-            auto result = futures[i].get();
-            auto trajectory = result.first;
-            bool isContactForce = result.second;
-
-            sequentialTrajectories.push_back(result);
-        } catch (const std::exception &e) {
-            std::string errorMsg = e.what();
-            if (errorMsg.find("STOMP") != std::string::npos) {
-                LOG_WARNING << "STOMP planning failed at trajectory " << i << ": " << e.what();
-            } else {
-                LOG_WARNING << "Unknown planning failure at trajectory " << i << ": " << e.what();
+            for (int i = 0; i < jointAngles.size(); ++i) {
+                point.position[i] = jointAngles[i];
+                point.velocity[i] = 0.0;
+                point.acceleration[i] = 0.0;
             }
-            LOG_INFO << "Discarding " << (futures.size() - i) << " remaining trajectories";
-            repositioningFailed = true;
-            break;
+
+            singlePoint.push_back(point);
+
+            _trajectories.emplace_back(singlePoint, true); // contact force = TRUE
+            LOG_DEBUG << "Contact force point at checkpoint " << start;
+        } else {
+            // Multi-point segment - create contact force trajectory through all waypoints
+            std::vector<Eigen::VectorXd> segmentWaypoints;
+            for (size_t i = start; i <= end; i++) {
+                segmentWaypoints.push_back(arms[i].getJointAngles());
+            }
+
+            // Generate time-optimal trajectory through all waypoints
+            MotionGenerator tempGenerator(*_arm);
+            if (_obstacleTree) {
+                tempGenerator.setObstacleTree(_obstacleTree);
+            }
+
+            auto trajectoryPoints = tempGenerator.generateTrajectoryFromCheckpoints(
+                segmentWaypoints);
+            
+            _trajectories.emplace_back(trajectoryPoints, true); // contact force = TRUE
+            LOG_DEBUG << "Contact force trajectory: " << start << "-" << end
+                     << " (" << trajectoryPoints.size() << " points)";
+        }
+
+        // Add inter-segment repositioning if not the last segment
+        if (segIdx + 1 < validSegments.size()) {
+            if (repositioningIndex < repositioningResults.size()
+                && !repositioningResults[repositioningIndex].empty()) {
+                std::vector<MotionGenerator::TrajectoryPoint> trajectoryPoints;
+                trajectoryPoints.reserve(repositioningResults[repositioningIndex].size());
+
+                // Copy repositioning trajectory points
+                for (const auto &point : repositioningResults[repositioningIndex]) {
+                    trajectoryPoints.push_back(point);
+                }
+
+                _trajectories.emplace_back(trajectoryPoints,
+                                           false); // repositioning = NOT contact force
+                size_t currentEnd = validSegments[segIdx].second;
+                size_t nextStart = validSegments[segIdx + 1].first;
+                LOG_DEBUG << "Inter-segment repositioning " << currentEnd << "-" << nextStart
+                         << ": " << trajectoryPoints.size() << " points";
+            } else {
+                LOG_ERROR << "Inter-segment repositioning failed for segment " << segIdx;
+                return false;
+            }
+            repositioningIndex++;
         }
     }
 
-    _trajectories = sequentialTrajectories;
-
-    threadPool->join();
- 
-    return !repositioningFailed;
+    LOG_INFO << "Generated " << _trajectories.size() << " trajectories";
+    
+    // Check and fix discontinuities between trajectory segments
+    bool discontinuitiesFixed = fixTrajectoryDiscontinuities();
+    if (discontinuitiesFixed) {
+        LOG_INFO << "Trajectory discontinuities corrected";
+    }
+    
+    printSegmentTimes();
+    
+    return true;
 }
 
 std::vector<std::pair<std::vector<MotionGenerator::TrajectoryPoint>, bool>>
@@ -342,23 +324,14 @@ std::vector<Eigen::Affine3d> UltrasoundScanTrajectoryPlanner::getScanPoses() con
 void UltrasoundScanTrajectoryPlanner::initializeThreadPool()
 {
     if (!_sharedThreadPool) {
-        const auto& config = _hardwareConfig;
-        
-        // Create thread pool with optimal core usage
-        // Use physical cores for computational work, reserve logical cores for I/O
-        size_t computeThreads = std::max(1u, config.physicalCores);
-        
-        // For STOMP's parallel trajectory generation, we want sufficient threads
-        // but not so many that we overwhelm the scheduler
-        size_t optimalThreads = std::min(computeThreads, 
-                                       static_cast<size_t>(config.batchSize));
-        
+        const auto &config = _hardwareConfig;
+        size_t optimalThreads = config.physicalCores;
+
         _sharedThreadPool = std::make_shared<boost::asio::thread_pool>(optimalThreads);
-        
+
         // Pre-warm the thread pool
         for (size_t i = 0; i < optimalThreads; ++i) {
             boost::asio::post(*_sharedThreadPool, []() {
-                // Warm-up task - helps with thread initialization overhead
                 std::this_thread::sleep_for(std::chrono::microseconds(1));
             });
         }
@@ -366,121 +339,589 @@ void UltrasoundScanTrajectoryPlanner::initializeThreadPool()
 }
 
 std::vector<Trajectory> UltrasoundScanTrajectoryPlanner::planTrajectoryBatch(
-    const std::vector<std::pair<Eigen::VectorXd, Eigen::VectorXd>>& requests)
+    const std::vector<std::pair<Eigen::VectorXd, Eigen::VectorXd>> &requests,
+    const std::vector<std::string> &descriptions,
+    bool enableShortcutting)
 {
     if (requests.empty()) {
-        LOG_WARNING << "Batch planning requested with empty trajectory list";
+        LOG_WARNING << "Empty trajectory batch requested";
         return {};
     }
-    
-    // Log batch start with configuration details
+
     auto startTime = std::chrono::high_resolution_clock::now();
-    LOG_INFO << "Starting trajectory batch planning - " << requests.size() << " trajectories";
-    LOG_INFO << "Hardware config: " << _hardwareConfig.physicalCores << " physical cores, " 
-             << _hardwareConfig.logicalCores << " logical cores, batch size: " 
-             << _hardwareConfig.batchSize;
-    
-    // Ensure thread pool is initialized
+    LOG_INFO << "Batch planning: " << requests.size() << " trajectories";
+
     initializeThreadPool();
     
+    // Initialize shared SDF before parallel processing to avoid race conditions
+    initializeSharedSdf();
+
     std::vector<Trajectory> results(requests.size());
     std::vector<std::future<void>> futures;
     futures.reserve(requests.size());
-    
-    // Batch size for memory efficiency and cache optimization
+
     const size_t batchSize = _hardwareConfig.batchSize;
     std::atomic<size_t> completedTrajectories{0};
     std::atomic<size_t> successfulTrajectories{0};
-    
+
     for (size_t i = 0; i < requests.size(); i += batchSize) {
         size_t endIdx = std::min(i + batchSize, requests.size());
-        LOG_DEBUG << "Processing batch " << (i / batchSize + 1) << " (trajectories " 
-                  << i << "-" << (endIdx - 1) << ")";
-        
+
         // Process batch
         for (size_t j = i; j < endIdx; ++j) {
-            auto future = boost::asio::post(*_sharedThreadPool, 
-                boost::asio::use_future([this, j, &requests, &results, &completedTrajectories, &successfulTrajectories]() {
+            auto future = boost::asio::post(
+                *_sharedThreadPool,
+                boost::asio::use_future([this,
+                                         j,
+                                         &requests,
+                                         &descriptions,
+                                         &results,
+                                         &completedTrajectories,
+                                         &successfulTrajectories,
+                                         enableShortcutting]() {
                     try {
-                        // Each thread gets its own motion generator to avoid contention
-                        MotionGenerator localGenerator(*_arm);
+                        const auto &startJoints = requests[j].first;
+                        const auto &targetJoints = requests[j].second;
                         
-                        // Use optimized STOMP configuration
+                        auto localGenerator = createMotionGeneratorWithSharedSdf(*_arm);
                         auto config = StompConfig::optimized();
-                        config.maxComputeTimeMs = 0.0; // Remove time limit
-                        
-                        // Set obstacle tree if available
-                        if (_obstacleTree) {
-                            localGenerator.setObstacleTree(_obstacleTree);
-                        }
-                        
-                        // Set start and target joints for the trajectory
-                        const auto& startJoints = requests[j].first;
-                        const auto& targetJoints = requests[j].second;
-                        
-                        // Create waypoints matrix as expected by MotionGenerator
+
                         Eigen::MatrixXd waypoints(2, startJoints.size());
                         waypoints.row(0) = startJoints.transpose();
                         waypoints.row(1) = targetJoints.transpose();
-                        
-                        localGenerator.setWaypoints(waypoints);
-                        
-                        // Create a thread pool with optimal cores for STOMP's internal parallelization
-                        // STOMP benefits from multiple threads for its noisy trajectory generation
-                        size_t stompThreads = std::max(2u, _hardwareConfig.physicalCores / 2);
-                        auto localThreadPool = std::make_shared<boost::asio::thread_pool>(stompThreads);
-                        
-                        // Perform STOMP planning with trajectory index for context
-                        bool success = localGenerator.performSTOMP(config, localThreadPool, static_cast<int>(j));
-                        localThreadPool->join();
-                        
+
+                        localGenerator->setWaypoints(waypoints);
+
+                        bool success = false;
+                        try {
+                            success = localGenerator->performSTOMP(config,
+                                                                   _sharedThreadPool,
+                                                                   static_cast<int>(j));
+                        } catch (const StompFailedException &) {
+                            success = false;
+                        }
+
                         if (success) {
-                            results[j] = localGenerator.getPath();
+                            LOG_DEBUG << "STOMP success: " << descriptions[j];
+                            results[j] = localGenerator->getPath();
                             successfulTrajectories++;
                         } else {
-                            LOG_WARNING << "[Traj " << j << "] STOMP planning failed";
+                            LOG_WARNING << "STOMP failed, trying two-step fallback: " << descriptions[j];
+
+                            // Fallback: Two separate STOMP trajectories
+                            // Step 1: startJoints -> _currentJoints (stopping at rest)
+                            auto step1Generator = createMotionGeneratorWithSharedSdf(*_arm);
+
+                            Eigen::MatrixXd step1Waypoints(2, startJoints.size());
+                            step1Waypoints.row(0) = startJoints.transpose();
+                            step1Waypoints.row(1) = _currentJoints.transpose();
+                            step1Generator->setWaypoints(step1Waypoints);
+
+                            auto fallBackConfig = StompConfig::optimized();
+
+                            bool step1Success = false;
+                            try {
+                                step1Success = step1Generator->performSTOMP(fallBackConfig,
+                                                                            _sharedThreadPool);
+                            } catch (const StompFailedException &) {
+                                step1Success = false;
+                            }
+
+                            // Step 2: _currentJoints -> targetJoints (starting from rest)
+                            auto step2Generator = createMotionGeneratorWithSharedSdf(*_arm);
+
+                            Eigen::MatrixXd step2Waypoints(2, _currentJoints.size());
+                            step2Waypoints.row(0) = _currentJoints.transpose();
+                            step2Waypoints.row(1) = targetJoints.transpose();
+                            step2Generator->setWaypoints(step2Waypoints);
+
+                            bool step2Success = false;
+                            try {
+                                step2Success = step2Generator->performSTOMP(fallBackConfig, _sharedThreadPool);
+                            } catch (const StompFailedException &) {
+                                step2Success = false;
+                            }
+
+                            if (step1Success && step2Success) {
+
+                                Trajectory step1Traj = step1Generator->getPath();
+                                Trajectory step2Traj = step2Generator->getPath();
+
+                                Trajectory combinedTrajectory;
+                                combinedTrajectory.reserve(step1Traj.size() + step2Traj.size() - 1);
+                                
+                                for (const auto &point : step1Traj) {
+                                    combinedTrajectory.push_back(point);
+                                }
+                                for (size_t i = 1; i < step2Traj.size(); ++i) {
+                                    combinedTrajectory.push_back(step2Traj[i]);
+                                }
+
+                                results[j] = combinedTrajectory;
+                                successfulTrajectories++;
+                                LOG_DEBUG << "Two-step STOMP success: " << descriptions[j]
+                                         << " (" << step1Traj.size() << "+" << step2Traj.size()
+                                         << "=" << combinedTrajectory.size() << " points)";
+                            } else {
+                                LOG_ERROR << "Two-step STOMP failed: " << descriptions[j]
+                                          << " (Step 1: " << (step1Success ? "OK" : "FAIL")
+                                          << ", Step 2: " << (step2Success ? "OK" : "FAIL") << ")";
+                            }
                         }
                         completedTrajectories++;
-                        
-                    } catch (const std::exception& e) {
-                        // Log error but continue with other trajectories
-                        LOG_ERROR << "[Traj " << j << "] Batch planning exception: " << e.what();
+
+                    } catch (const std::exception &e) {
+                        LOG_ERROR << "Batch planning exception (" << descriptions[j]
+                                  << "): " << e.what();
                         completedTrajectories++;
-                        // results[j] remains default-constructed (empty)
                     }
                 }));
-            
+
             futures.push_back(std::move(future));
         }
-        
-        // Optional: Add small delay between batches to prevent CPU saturation
+
         if (endIdx < requests.size()) {
             std::this_thread::sleep_for(std::chrono::microseconds(100));
         }
     }
-    
-    // Wait for all trajectories to complete
-    for (auto& future : futures) {
+
+    for (auto &future : futures) {
         try {
             future.get();
-        } catch (const std::exception& e) {
+        } catch (const std::exception &e) {
             LOG_ERROR << "Future completion error: " << e.what();
         }
     }
-    
-    // Calculate timing and log completion statistics
+
     auto endTime = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
-    
-    LOG_INFO << "Trajectory batch planning completed:";
-    LOG_INFO << "  Total trajectories: " << requests.size();
-    LOG_INFO << "  Successful: " << successfulTrajectories << " (" 
-             << std::fixed << std::setprecision(1) 
-             << (100.0 * successfulTrajectories / requests.size()) << "%)";
-    LOG_INFO << "  Failed: " << (requests.size() - successfulTrajectories);
-    LOG_INFO << "  Duration: " << duration.count() << "ms";
-    LOG_INFO << "  Average: " << std::fixed << std::setprecision(2) 
-             << (duration.count() / static_cast<double>(requests.size())) << "ms per trajectory";
+
+    LOG_INFO << "Batch planning complete: " << successfulTrajectories << "/" << requests.size()
+             << " (" << std::fixed << std::setprecision(1) 
+             << (100.0 * successfulTrajectories / requests.size()) << "%) in "
+             << duration.count() << "ms";
 
     return results;
+}
+
+std::vector<Trajectory> UltrasoundScanTrajectoryPlanner::planTrajectoryBatchHauser(
+    const std::vector<std::pair<Eigen::VectorXd, Eigen::VectorXd>> &requests,
+    const std::vector<std::string> &descriptions,
+    bool enableShortcutting)
+{
+    if (requests.empty()) {
+        LOG_WARNING << "Empty Hauser batch requested";
+        return {};
+    }
+
+    auto startTime = std::chrono::high_resolution_clock::now();
+    LOG_INFO << "Hauser batch planning: " << requests.size() << " trajectories";
+
+    initializeThreadPool();
+
+    std::vector<Trajectory> results(requests.size());
+    std::vector<std::future<void>> futures;
+    futures.reserve(requests.size());
+
+    // Batch size for memory efficiency and cache optimization
+    const size_t batchSize = _hardwareConfig.batchSize;
+    std::atomic<size_t> completedTrajectories{0};
+    std::atomic<size_t> successfulTrajectories{0};
+
+    for (size_t i = 0; i < requests.size(); i += batchSize) {
+        size_t endIdx = std::min(i + batchSize, requests.size());
+
+        // Process batch
+        for (size_t j = i; j < endIdx; ++j) {
+            auto future = boost::asio::post(
+                *_sharedThreadPool,
+                boost::asio::use_future([this,
+                                         j,
+                                         &requests,
+                                         &descriptions,
+                                         &results,
+                                         &completedTrajectories,
+                                         &successfulTrajectories,
+                                         enableShortcutting]() {
+                    try {
+                        // Each thread gets its own motion generator to avoid contention
+                        MotionGenerator localGenerator(*_arm);
+
+                        // Set obstacle tree if available
+                        if (_obstacleTree) {
+                            localGenerator.setObstacleTree(_obstacleTree);
+                        }
+
+                        // Set start and target joints for the trajectory
+                        const auto &startJoints = requests[j].first;
+                        const auto &targetJoints = requests[j].second;
+
+                        // Use RRT Connect to generate waypoints for Hauser optimization
+                        auto hauserPathPlanner = std::make_unique<PathPlanner>();
+
+                        // Configure PathPlanner to use RRT Connect for Hauser waypoints
+                        Params rrtConnectParams;
+                        rrtConnectParams.algo = RRTConnect;
+                        rrtConnectParams.stepSize = 0.2;
+                        rrtConnectParams.goalBiasProbability = 0.2;
+                        rrtConnectParams.maxIterations = 10000;
+
+                        hauserPathPlanner->setParams(rrtConnectParams);
+
+                        // Set start and goal configurations
+                        RobotArm startArm(*_arm);
+                        startArm.setJointAngles(startJoints);
+                        hauserPathPlanner->setStartPose(startArm);
+                        hauserPathPlanner->setObstacleTree(_obstacleTree);
+
+                        RobotArm goalArm(*_arm);
+                        goalArm.setJointAngles(targetJoints);
+                        hauserPathPlanner->setGoalConfiguration(goalArm);
+
+                        bool rrtPathFound = hauserPathPlanner->runPathFinding();
+
+                        // Retry RRT Connect once if it failed
+                        if (!rrtPathFound) {
+                            LOG_DEBUG << "RRT Connect retry for Hauser...";
+                            rrtPathFound = hauserPathPlanner->runPathFinding();
+                        }
+
+                        bool success = false;
+
+                        if (rrtPathFound) {
+                            // Apply shortcutting to optimize RRT Connect waypoints before Hauser
+                            if (enableShortcutting) {
+                                hauserPathPlanner->shortcutPath(100, 20);
+                            }
+
+                            // Get optimized RRT Connect path and convert to waypoints for Hauser
+                            Eigen::MatrixXd rrtWaypoints = hauserPathPlanner->getAnglesPath();
+                            localGenerator.setWaypoints(rrtWaypoints);
+
+                            // Use Hauser optimization with RRT Connect waypoints
+                            try {
+                                localGenerator.performHauser(100); // maxIterations = 1000
+                                success = true;
+                            } catch (const std::exception &e) {
+                                LOG_WARNING << "Hauser optimization failed: " << descriptions[j];
+                                success = false;
+                            }
+                        } else {
+                            LOG_WARNING << "RRT Connect failed for Hauser: " << descriptions[j];
+                        }
+
+                        if (success) {
+                            LOG_DEBUG << "Hauser success: " << descriptions[j];
+                            results[j] = localGenerator.getPath();
+                            successfulTrajectories++;
+                        } else {
+                            LOG_DEBUG << "Hauser failed: " << descriptions[j];
+                        }
+                        completedTrajectories++;
+
+                    } catch (const std::exception &e) {
+                        // Log error but continue with other trajectories
+                        LOG_ERROR << "Hauser batch planning exception (" << descriptions[j]
+                                  << "): " << e.what();
+                        completedTrajectories++;
+                        // results[j] remains default-constructed (empty)
+                    }
+                }));
+
+            futures.push_back(std::move(future));
+        }
+
+        // Add small delay between batches to prevent CPU saturation
+        if (endIdx < requests.size()) {
+            std::this_thread::sleep_for(std::chrono::microseconds(100));
+        }
+    }
+
+    // Wait for all trajectories to complete
+    for (auto &future : futures) {
+        try {
+            future.get();
+        } catch (const std::exception &e) {
+            LOG_ERROR << "Future completion error: " << e.what();
+        }
+    }
+
+    auto endTime = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
+
+    LOG_INFO << "Hauser batch complete: " << successfulTrajectories << "/" << requests.size()
+             << " (" << std::fixed << std::setprecision(1) 
+             << (100.0 * successfulTrajectories / requests.size()) << "%) in "
+             << duration.count() << "ms";
+
+    return results;
+}
+
+void UltrasoundScanTrajectoryPlanner::validateTrajectoryDiscontinuities() const
+{
+    if (_trajectories.empty()) {
+        LOG_WARNING << "No trajectories to validate";
+        return;
+    }
+
+    LOG_DEBUG << "Validating trajectory continuity";
+    
+    double maxPositionDiscontinuity = 0.0;
+    int discontinuityCount = 0;
+    
+    const double POSITION_THRESHOLD = 0.01; // 0.01 radians (~0.57 degrees)
+    
+    for (size_t segIdx = 0; segIdx < _trajectories.size() - 1; ++segIdx) {
+        const auto& currentSegment = _trajectories[segIdx].first;
+        const auto& nextSegment = _trajectories[segIdx + 1].first;
+        
+        if (currentSegment.empty() || nextSegment.empty()) {
+            LOG_WARNING << "Trajectory segment " << segIdx << " or " << (segIdx + 1) << " is empty";
+            continue;
+        }
+        
+        const auto& currentEnd = currentSegment.back();
+        const auto& nextStart = nextSegment.front();
+        
+        // Check position continuity
+        if (currentEnd.position.size() != nextStart.position.size()) {
+            LOG_ERROR << "Position vector size mismatch between segments " << segIdx << " and " << (segIdx + 1);
+            continue;
+        }
+        
+        double maxJointDiff = 0.0;
+        int worstJoint = -1;
+        for (size_t j = 0; j < currentEnd.position.size(); ++j) {
+            double jointDiff = std::abs(nextStart.position[j] - currentEnd.position[j]);
+            if (jointDiff > maxJointDiff) {
+                maxJointDiff = jointDiff;
+                worstJoint = static_cast<int>(j);
+            }
+        }
+        
+        if (maxJointDiff > POSITION_THRESHOLD) {
+            LOG_WARNING << "Position discontinuity segments " << segIdx << "-" << (segIdx + 1)
+                       << ": joint " << worstJoint << " differs by " << std::fixed << std::setprecision(3) 
+                       << (maxJointDiff * 180.0 / M_PI) << " deg";
+            maxPositionDiscontinuity = std::max(maxPositionDiscontinuity, maxJointDiff);
+            discontinuityCount++;
+        }
+    }
+    
+    // Summary
+    if (discontinuityCount == 0) {
+        LOG_DEBUG << "No significant discontinuities detected";
+    } else if (maxPositionDiscontinuity > 0.1) { // > 5.7 degrees
+        LOG_WARNING << "Large position discontinuities detected: " << discontinuityCount << " found";
+    } else {
+        LOG_DEBUG << "Minor discontinuities: " << discontinuityCount << " found";
+    }
+}
+
+bool UltrasoundScanTrajectoryPlanner::fixTrajectoryDiscontinuities()
+{
+    if (_trajectories.size() < 2) {
+        return false; // No discontinuities possible with less than 2 segments
+    }
+
+    LOG_DEBUG << "Checking trajectory discontinuities";
+    
+    const double POSITION_THRESHOLD = 0.01; // 0.01 radians (~0.57 degrees) 
+    const double CORRECTION_TIME = 0.1;     // 100ms for correction segments
+    bool discontinuitiesFound = false;
+    
+    for (size_t segIdx = 0; segIdx < _trajectories.size() - 1; ++segIdx) {
+        auto& currentSegment = _trajectories[segIdx].first;
+        const auto& nextSegment = _trajectories[segIdx + 1].first;
+        bool currentIsContactForce = _trajectories[segIdx].second;
+        
+        if (currentSegment.empty() || nextSegment.empty()) {
+            continue;
+        }
+        
+        const auto& currentEnd = currentSegment.back();
+        const auto& nextStart = nextSegment.front();
+        
+        // Check for position discontinuity
+        double maxJointDiff = 0.0;
+        int worstJoint = -1;
+        for (size_t j = 0; j < currentEnd.position.size() && j < nextStart.position.size(); ++j) {
+            double jointDiff = std::abs(nextStart.position[j] - currentEnd.position[j]);
+            if (jointDiff > maxJointDiff) {
+                maxJointDiff = jointDiff;
+                worstJoint = static_cast<int>(j);
+            }
+        }
+        
+        if (maxJointDiff > POSITION_THRESHOLD) {
+            LOG_DEBUG << "Discontinuity at segments " << segIdx << "-" << (segIdx + 1)
+                    << ": joint " << worstJoint << " differs by " << std::fixed << std::setprecision(2) 
+                    << (maxJointDiff * 180.0 / M_PI) << " deg";
+            
+            // Fix discontinuity by appending correction segment to the current trajectory
+            bool correctionAdded = addCorrectionSegment(segIdx, currentEnd, nextStart);
+            if (correctionAdded) {
+                LOG_DEBUG << "Added correction segment to trajectory " << segIdx;
+                discontinuitiesFound = true;
+            } else {
+                LOG_WARNING << "Failed to add correction segment for segment " << segIdx;
+            }
+        }
+    }
+    
+    if (!discontinuitiesFound) {
+        LOG_DEBUG << "No discontinuities requiring correction";
+    }
+    
+    return discontinuitiesFound;
+}
+
+bool UltrasoundScanTrajectoryPlanner::addCorrectionSegment(
+    size_t segmentIndex,
+    const MotionGenerator::TrajectoryPoint& fromPoint, 
+    const MotionGenerator::TrajectoryPoint& toPoint)
+{
+    try {
+        auto motionGenerator = createMotionGeneratorWithSharedSdf(*_arm);
+        
+        LOG_DEBUG << "Planning correction segment";
+        
+        // Create a correction trajectory that starts at t=0 (as intended behavior requires)
+        MotionGenerator::TrajectoryPoint correctionStart = fromPoint;
+        MotionGenerator::TrajectoryPoint correctionEnd = toPoint;
+        
+        // Reset times to 0 to ensure correction trajectory starts at t=0
+        correctionStart.time = 0.0;
+        correctionEnd.time = 0.0; // Will be calculated by computeTimeOptimalSegment
+        
+        auto correctionTrajectory = motionGenerator->computeTimeOptimalSegment(
+            correctionStart,  // start at t=0
+            correctionEnd,    // end (time will be calculated)
+            fromPoint.time              // startTime = 0 (every trajectory should start at t=0)
+        );
+        
+        if (correctionTrajectory.empty()) {
+            LOG_ERROR << "Failed to generate correction trajectory";
+            return false;
+        }
+        
+        // Append the correction trajectory points to the current segment (skip first point to avoid duplication)
+        auto& currentSegment = _trajectories[segmentIndex].first;
+        double currentSegmentEndTime = currentSegment.empty() ? 0.0 : currentSegment.back().time;
+        
+        for (size_t i = 1; i < correctionTrajectory.size(); ++i) { // Skip first point
+            auto point = correctionTrajectory[i];
+            // Adjust time to continue from where current segment ends
+            point.time += currentSegmentEndTime;
+            currentSegment.push_back(point);
+        }
+        
+        // Ensure the correction segment ends exactly at the expected position
+        if (!currentSegment.empty()) {
+            auto& lastPoint = currentSegment.back();
+            lastPoint.position = toPoint.position;
+            lastPoint.velocity = toPoint.velocity;
+            lastPoint.acceleration = toPoint.acceleration;
+        }
+        
+        // DO NOT adjust next segment timing - each segment should start at t=0 as intended
+        // The next segment will naturally start at t=0 as designed
+        
+        double correctionDuration = correctionTrajectory.back().time - correctionTrajectory.front().time;
+        LOG_DEBUG << "Correction segment added: " << (correctionTrajectory.size() - 1) 
+                << " points, duration: " << std::fixed << std::setprecision(3) 
+                << correctionDuration << "s";
+        
+        return true;
+        
+    } catch (const std::exception& e) {
+        LOG_ERROR << "Exception while generating correction segment: " << e.what();
+        return false;
+    }
+}
+
+void UltrasoundScanTrajectoryPlanner::initializeSharedSdf()
+{
+    if (_sdfCacheInitialized || !_obstacleTree) {
+        return;
+    }
+    
+    LOG_DEBUG << "Initializing shared SDF cache";
+    
+    MotionGenerator tempGenerator(*_arm);
+    tempGenerator.setObstacleTree(_obstacleTree);
+    tempGenerator.createSDF();
+    
+    if (tempGenerator.isSdfInitialized()) {
+        _sharedSdf = tempGenerator.getSdf();
+        _sharedSdfMinPoint = tempGenerator.getSdfMinPoint();
+        _sharedSdfMaxPoint = tempGenerator.getSdfMaxPoint();
+        _sharedSdfResolution = tempGenerator.getSdfResolution();
+        _sdfCacheInitialized = true;
+        
+        LOG_DEBUG << "SDF cache initialized: " 
+                 << _sharedSdf.size() << "x" << _sharedSdf[0].size() << "x" << _sharedSdf[0][0].size() 
+                 << " voxels at " << _sharedSdfResolution << "m resolution";
+    } else {
+        LOG_WARNING << "Failed to initialize SDF cache";
+    }
+}
+
+std::unique_ptr<MotionGenerator> UltrasoundScanTrajectoryPlanner::createMotionGeneratorWithSharedSdf(const RobotArm& arm)
+{
+    if (!_sdfCacheInitialized) {
+        initializeSharedSdf();
+    }
+    
+    if (_sdfCacheInitialized) {
+        return std::make_unique<MotionGenerator>(arm, _sharedSdf, _sharedSdfMinPoint, 
+                                               _sharedSdfMaxPoint, _sharedSdfResolution, _obstacleTree);
+    } else {
+        auto generator = std::make_unique<MotionGenerator>(arm);
+        if (_obstacleTree) {
+            generator->setObstacleTree(_obstacleTree);
+        }
+        return generator;
+    }
+}
+
+void UltrasoundScanTrajectoryPlanner::printSegmentTimes() const
+{
+    if (_trajectories.empty()) {
+        LOG_INFO << "No trajectory segments to display";
+        return;
+    }
+    
+    LOG_INFO << "Trajectory segment timing analysis:";
+    LOG_INFO << "=================================";
+    
+    double totalDuration = 0.0;
+    
+    for (size_t segIdx = 0; segIdx < _trajectories.size(); ++segIdx) {
+        const auto& segment = _trajectories[segIdx].first;
+        bool isContactForce = _trajectories[segIdx].second;
+        
+        if (segment.empty()) {
+            LOG_INFO << "Segment " << segIdx << ": EMPTY ("
+                    << (isContactForce ? "Contact" : "Repositioning") << ")";
+            continue;
+        }
+        
+        double startTime = segment.front().time;
+        double endTime = segment.back().time;
+        double duration = endTime - startTime;
+        
+        LOG_INFO << "Segment " << segIdx << ": " 
+                << std::fixed << std::setprecision(3)
+                << startTime << "s -> " << endTime << "s"
+                << " (duration: " << duration << "s, "
+                << segment.size() << " points, "
+                << (isContactForce ? "Contact" : "Repositioning") << ")";
+        
+        totalDuration = std::max(totalDuration, endTime);
+    }
+    
+    LOG_INFO << "=================================";
+    LOG_INFO << "Total trajectory duration: " << std::fixed << std::setprecision(3) 
+            << totalDuration << "s across " << _trajectories.size() << " segments";
 }

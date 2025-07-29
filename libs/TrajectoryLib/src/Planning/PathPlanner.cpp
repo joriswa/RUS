@@ -203,10 +203,23 @@ bool PathPlanner::performRRT()
 
 void PathPlanner::setStartPose(RobotArm arm)
 {
+    // Debug: Check if the robot arm is properly initialized
+    auto joints = arm.getJointAngles();
+    std::cout << "DEBUG setStartPose: incoming arm joint count = " << joints.size() << std::endl;
+    
+    if (joints.size() == 0) {
+        std::cout << "ERROR setStartPose: RobotArm has no joints!" << std::endl;
+        throw std::runtime_error("RobotArm has no joints in setStartPose");
+    }
+    
     _startPoint = arm.getJointState();
     _pathRoot = std::make_shared<PathNode>(_startPoint, arm);
     _startArm = arm;
     _tree.insert(std::make_pair(_pathRoot->_state, _pathRoot));
+    
+    // Debug: Verify what was set
+    std::cout << "DEBUG setStartPose: _startArm joints = [" 
+              << _startArm.getJointAngles().transpose() << "]" << std::endl;
 }
 
 void PathPlanner::setGoalPose(Eigen::Vector3d t, Eigen::Matrix3d r)
@@ -218,8 +231,21 @@ void PathPlanner::setGoalPose(Eigen::Vector3d t, Eigen::Matrix3d r)
 
 void PathPlanner::setGoalConfiguration(RobotArm arm)
 {
+    // Debug: Check if the robot arm is properly initialized
+    auto joints = arm.getJointAngles();
+    std::cout << "DEBUG setGoalConfiguration: incoming arm joint count = " << joints.size() << std::endl;
+    
+    if (joints.size() == 0) {
+        std::cout << "ERROR setGoalConfiguration: RobotArm has no joints!" << std::endl;
+        throw std::runtime_error("RobotArm has no joints in setGoalConfiguration");
+    }
+    
     _goalConfigSpecified = true;
     _goalArm = arm;
+    
+    // Debug: Verify what was set
+    std::cout << "DEBUG setGoalConfiguration: _goalArm joints = [" 
+              << _goalArm.getJointAngles().transpose() << "]" << std::endl;
 }
 
 void PathPlanner::setObstacleTree(const std::shared_ptr<BVHTree> &newObstacleTree)
@@ -352,8 +378,8 @@ std::vector<NodePtr> PathPlanner::rewirePath(NodePtr newNode, std::vector<NodePt
 
 bool PathPlanner::closeToGoal(RobotArm arm)
 {
-    Eigen::Vector<double, 7> currentJoints = arm.getJointAngles();
-    Eigen::Vector<double, 7> goalJoints = _goalArm.getJointAngles();
+    Eigen::VectorXd currentJoints = arm.getJointAngles();
+    Eigen::VectorXd goalJoints = _goalArm.getJointAngles();
 
     return motionIsValid(arm, _goalArm);
 }
@@ -532,12 +558,22 @@ void PathPlanner::constructPath(NodePtr startNode, NodePtr goalNode)
 {
     _path.clear();
 
+    // Trace back from startNode to its tree root
+    std::vector<std::tuple<State, RobotArm>> startPath;
     for (NodePtr node = startNode; node != nullptr; node = node->_parent) {
-        _path.insert(_path.begin(), std::make_tuple(node->_state, node->_arm));
+        startPath.insert(startPath.begin(), std::make_tuple(node->_state, node->_arm));
     }
 
+    // Trace back from goalNode to its tree root, but keep in reverse order  
+    std::vector<std::tuple<State, RobotArm>> goalPath;
     for (NodePtr node = goalNode; node != nullptr; node = node->_parent) {
-        _path.push_back(std::make_tuple(node->_state, node->_arm));
+        goalPath.push_back(std::make_tuple(node->_state, node->_arm));
+    }
+
+    _path = startPath;
+
+    if (!goalPath.empty()) {
+        _path.insert(_path.end(), goalPath.begin() + 1, goalPath.end());
     }
 }
 
@@ -697,6 +733,50 @@ void PathPlanner::connectWithStraightLines()
     // Add the final point
     newPath.push_back(_path.back());
     _path = std::move(newPath);
+}
+
+void PathPlanner::shortcutPath(int maxIterations, int maxAttempts)
+{
+    if (_path.size() < 3) {
+        return; // Need at least 3 waypoints to shortcut
+    }
+
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    
+    for (int iter = 0; iter < maxIterations; ++iter) {
+        bool improved = false;
+        
+        for (int attempt = 0; attempt < maxAttempts; ++attempt) {
+            // Randomly select two non-adjacent indices
+            std::uniform_int_distribution<> dis(0, static_cast<int>(_path.size() - 1));
+            int i = dis(gen);
+            int j = dis(gen);
+            
+            // Ensure i < j and they are not adjacent
+            if (i >= j || j - i <= 1) {
+                continue;
+            }
+            
+            // Check if direct connection from i to j is collision-free
+            auto [stateI, armI] = _path[i];
+            auto [stateJ, armJ] = _path[j];
+            
+            if (motionIsValid(armI, armJ, true)) {
+                // Remove all waypoints between i and j
+                _path.erase(_path.begin() + i + 1, _path.begin() + j);
+                improved = true;
+                
+                // Early termination for this attempt since we modified the path
+                break;
+            }
+        }
+        
+        // If no improvement was made in this iteration, stop early
+        if (!improved) {
+            break;
+        }
+    }
 }
 
 void PathPlanner::saveJointAnglesToFile(const std::string &filename)

@@ -222,7 +222,7 @@ MainWindow::MainWindow(QWidget *parent)
     , ui(new Ui::MainWindow)
 {
     qDebug() << "Starting PathPlanner application initialization";
-    
+
     ui->setupUi(this);
     _robotArm = new RobotArm("/Users/joris/Uni/MA/robot_definition/panda_US.urdf");
     qDebug() << "Robot arm initialized";
@@ -244,10 +244,13 @@ MainWindow::MainWindow(QWidget *parent)
     axes = Rx * Ry * Rz;
 
     // Initial joint configuration for the trajectory planner
-    std::vector<double> initialJoints = {0.374894, -0.043533, 0.087470, -1.533429, 0.02237, 1.050135, 0.075773};
-    
+    Eigen::VectorXd initialJoints(7);
+    initialJoints << 0.374894, -0.043533, 0.087470, -1.533429, 0.02237, 1.050135, 0.075773;
+
     _usPlanner = new UltrasoundScanTrajectoryPlanner(
-        "/Users/joris/Uni/MA/robot_definition/panda_US.urdf", initialJoints);
+        "/Users/joris/Uni/MA/robot_definition/panda_US.urdf");
+
+    _usPlanner->setCurrentJoints(initialJoints);
     qDebug() << "Ultrasound trajectory planner initialized";
 
     Eigen::VectorXd angles(7);
@@ -561,7 +564,7 @@ void MainWindow::findPath()
     _usPlanner->setCurrentJoints(_robotArm->getJointAngles());
     
     qDebug() << "Running trajectory planning";
-    _usPlanner->planTrajectories();
+    _usPlanner->planTrajectories(false);
     qDebug() << "Trajectory planning completed";
 
     ui->listWidget_trajectories->clear();

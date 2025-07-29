@@ -1,0 +1,22 @@
+# Optimal STOMP parameters found by Optuna optimization
+# Trial 24 - Composite Score: 2.0248
+csv_file: "/Users/joris/Uni/MA/Code/PathPlanner_US_wip/apps/ParameterTuning/Data/Ext_Ant_Scan/scan_pose_list_ee.csv"
+obstacles_file: "/Users/joris/Uni/MA/Code/PathPlanner_US_wip/apps/ParameterTuning/Data/Ext_Ant_Scan/obstacles.xml"
+urdf_file: "/Users/joris/Uni/MA/Code/PathPlanner_US_wip/res/scenario_1/panda_US.urdf"
+output_file: "optimal_results.json"
+
+stomp:
+  temperature: 23.756654804919137
+  learning_rate: 0.4426954605506927
+  max_iterations: 50
+  dt: 0.07393752094959168
+  num_noisy_trajectories: 28
+  num_best_samples: 4
+
+evaluation:
+  trajectory_pairs: 20  # Use more pairs for final validation
+
+# Performance metrics:
+# Success Rate: 1.0
+# Avg Planning Time: 4829.486385249999ms
+# Composite Score: 2.0248

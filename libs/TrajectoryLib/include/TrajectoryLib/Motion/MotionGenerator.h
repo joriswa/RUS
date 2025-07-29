@@ -94,11 +94,14 @@ struct StompConfig
     int numNoisyTrajectories = 12;          ///< Number of noisy trajectory samples per iteration (optimized)
     int numBestSamples = 6;                ///< Number of best samples to use for updates (optimized)
     int maxIterations = 250;               ///< Maximum optimization iterations (requested value)
+    int N = 75;                           ///< Number of trajectory points
     double dt = 0.1;                     ///< Time step for trajectory discretization (optimized)
     double learningRate = 0.1;          ///< Learning rate for trajectory updates (optimized)
     double temperature = 15.9079;          ///< Temperature parameter for sample weighting (optimized)
     int numJoints = 7;                     ///< Number of robot joints
     double outputFrequency = 1000.0;         ///< Output frequency in Hz for quintic polynomial fitting
+    double obstacleCostWeight = 1.0;       ///< Weight for obstacle cost in composite cost function
+    double constraintCostWeight = 1.0;     ///< Weight for constraint cost in composite cost function
 
     Eigen::VectorXd jointStdDevs           ///< Standard deviations for noise per joint
         = 0.2 * (Eigen::VectorXd(7) << 1., 0.8, 1.0, 0.8, 0.4, 0.4, 0.4).finished();
@@ -330,9 +333,15 @@ public:
     double computeCost(const Eigen::MatrixXd &trajectory, double dt) override;
 };
 
+/**
+ * @brief STOMP and Hauser trajectory optimization for robotic ultrasound scanning
+ */
 class MotionGenerator
 {
 public:
+    /**
+     * @brief Single trajectory point with position, velocity, acceleration and time
+     */
     struct TrajectoryPoint
     {
         std::vector<double> position;
@@ -341,194 +350,167 @@ public:
         double time;
     };
 
-    struct TrajectorySegment
-    {
-        std::vector<TrajectoryPoint> points;
-    };
-
+    /**
+     * @brief Construct motion generator with robot arm
+     * @param arm Robot arm model
+     */
     MotionGenerator(RobotArm arm);
+    
+    /**
+     * @brief Construct motion generator with pre-computed SDF to avoid recomputation
+     * @param arm Robot arm model
+     * @param sdf Pre-computed signed distance field
+     * @param sdfMinPoint SDF bounding box minimum point
+     * @param sdfMaxPoint SDF bounding box maximum point
+     * @param sdfResolution SDF grid resolution
+     * @param obstacleTree Obstacle tree for collision checking
+     */
+    MotionGenerator(RobotArm arm,
+                   const std::vector<std::vector<std::vector<double>>>& sdf,
+                   const Eigen::Vector3d& sdfMinPoint,
+                   const Eigen::Vector3d& sdfMaxPoint,
+                   double sdfResolution,
+                   std::shared_ptr<BVHTree> obstacleTree);
 
+    /**
+     * @brief Set waypoints for trajectory planning
+     * @param waypoints Matrix where each row is a joint configuration
+     */
     void setWaypoints(const Eigen::MatrixXd &waypoints);
     
+    /**
+     * @brief Perform trajectory optimization using Hauser shortcutting algorithm
+     * @param maxIterations Maximum optimization iterations
+     * @param out Output parameter (unused)
+     * @param outputFrequency Output frequency (unused)
+     */
     void performHauser(unsigned int maxIterations, const std::string &out = "", unsigned int outputFrequency = 100);
+    
+    /**
+     * @brief Perform trajectory optimization using STOMP algorithm
+     * @param config STOMP configuration parameters
+     * @param sharedPool Optional shared thread pool for parallelization
+     * @param trajectoryIndex Optional trajectory index for logging
+     * @return True if collision-free trajectory found
+     */
     bool performSTOMP(const StompConfig &config,
                       std::shared_ptr<boost::asio::thread_pool> sharedPool = nullptr,
                       int trajectoryIndex = -1);
 
+    /**
+     * @brief Get the optimized trajectory
+     * @return Vector of trajectory points
+     */
     std::vector<TrajectoryPoint> getPath() const { return _path; }
 
+    /**
+     * @brief Set obstacle tree for collision checking
+     * @param newObstacleTree BVH tree containing obstacles
+     */
     void setObstacleTree(const std::shared_ptr<BVHTree> &newObstacleTree);
 
-    void saveTrajectoryToCSV(const std::string &filename);
-
-    void setExplorationConstant(double newExplorationConstant);
-
+    /**
+     * @brief Create signed distance field from obstacle tree
+     */
     void createSDF();
 
-    Eigen::MatrixXd initializeTrajectory(Eigen::Matrix<double, 7, 1> goalVec,
-                                         Eigen::Matrix<double, 7, 1> startVec,
-                                         int N,
-                                         const int D);
-
-    void initializeCostCalculator();
-
-    struct TrajectoryEvaluation
-    {
-        double cost;
-        bool isCollisionFree;
-        Eigen::VectorXd endEffectorMetrics;
-    };
-
-    // Apply the probability-weighted update to a trajectory
-    Eigen::MatrixXd applyProbabilisticUpdate(const Eigen::MatrixXd &currentTrajectory,
-                                             const std::vector<Eigen::MatrixXd> &sampleTrajectories,
-                                             const Eigen::VectorXd &probabilities,
-                                             double learningRate);
-
-    bool finaliseTrajectory(double jerkLimit = 0.5);
-
-    std::vector<MotionGenerator::TrajectoryPoint> generateTrajectoryFromCheckpoints(
+    /**
+     * @brief Generate smooth trajectory from joint space checkpoints
+     * @param checkpoints Vector of joint configurations
+     * @return Vector of trajectory points with smooth interpolation
+     */
+    std::vector<TrajectoryPoint> generateTrajectoryFromCheckpoints(
         const std::vector<Eigen::VectorXd> &checkpoints);
 
     /**
-     * @brief Generate trajectory by interpolating task space checkpoints with predefined scan speed
-     * 
-     * This method takes a set of task space poses (checkpoints), interpolates between them
-     * at a constant end-effector speed, and uses the CC IK solver to compute joint configurations.
-     * 
-     * @param taskSpaceCheckpoints Vector of end-effector poses (4x4 transformation matrices)
-     * @param scanSpeed Desired end-effector speed in m/s
-     * @param q7 Redundant parameter for IK solver (7th joint angle)
-     * @param initialJointConfig Initial joint configuration for CC IK
-     * @return Vector of trajectory points with joint configurations
+     * @brief Check if robot arm has collision at given joint positions
+     * @param jointPositions Joint angle values
+     * @return True if collision detected
      */
-    std::vector<MotionGenerator::TrajectoryPoint> generateTaskSpaceTrajectory(
-        const std::vector<Eigen::Affine3d> &poses,
-        double endEffectorSpeed,
-        const Eigen::VectorXd &initialJoints);
-
     bool armHasCollision(std::vector<double> jointPositions);
+    
+    /**
+     * @brief Check if robot arm has collision
+     * @param arm Robot arm to check
+     * @return True if collision detected
+     */
     bool armHasCollision(RobotArm &arm);
 
-    bool performSTOMPWithCheckpoints(const std::vector<Eigen::VectorXd> &checkpoints,
-                                     std::vector<TrajectoryPoint> initialTrajectory,
-                                     const StompConfig &config,
-                                     std::shared_ptr<boost::asio::thread_pool> sharedPool = nullptr);
+    /**
+     * @brief Check if SDF is initialized
+     * @return True if SDF has been computed
+     */
+    bool isSdfInitialized() const;
+    
+    /**
+     * @brief Get computed SDF data
+     * @return Reference to 3D SDF grid
+     */
+    const std::vector<std::vector<std::vector<double>>>& getSdf() const;
+    
+    /**
+     * @brief Get SDF bounding box minimum point
+     * @return Minimum corner of SDF bounding box
+     */
+    const Eigen::Vector3d& getSdfMinPoint() const;
+    
+    /**
+     * @brief Get SDF bounding box maximum point
+     * @return Maximum corner of SDF bounding box
+     */
+    const Eigen::Vector3d& getSdfMaxPoint() const;
+    
+    /**
+     * @brief Get SDF grid resolution
+     * @return Grid spacing in meters
+     */
+    double getSdfResolution() const;
 
     /**
-     * @brief Print the maximum velocity values for each joint
-     * 
-     * Outputs the maximum joint velocities to the console, useful for
-     * debugging and analysis of trajectory performance.
+     * @brief Compute time-optimal trajectory segment
+     * @param start Starting trajectory point
+     * @param end Ending trajectory point
+     * @param startTime Time at segment start
+     * @return Vector of trajectory points for segment
      */
+    std::vector<TrajectoryPoint> computeTimeOptimalSegment(
+        const TrajectoryPoint &start, const TrajectoryPoint &end, double startTime);
+
+    /**
+     * @brief Save trajectory to CSV file
+     * @param filename Output CSV file path
+     */
+    void saveTrajectoryToCSV(const std::string &filename);
 
 private:
     std::unique_ptr<CompositeCostCalculator> _costCalculator;
-
     std::vector<TrajectoryPoint> _path;
     std::vector<double> _maxJointVelocities = std::vector<double>(7, .4);
     std::vector<double> _maxJointAccelerations = std::vector<double>(7, .5);
-
-    Eigen::MatrixXd _M;
-    Eigen::MatrixXd _R;
-    Eigen::MatrixXd _L;
+    Eigen::MatrixXd _M, _R, _L;
     bool _matricesInitialized = false;
-
-    double _explorationConstant = 0.1;
-
     Eigen::MatrixXd _waypoints;
     const int _numJoints = 7;
-
     std::shared_ptr<BVHTree> _obstacleTree;
     RobotArm _arm;
-
     std::vector<std::vector<std::vector<double>>> _sdf;
-    Eigen::Vector3d _sdfMinPoint;
-    Eigen::Vector3d _sdfMaxPoint;
+    Eigen::Vector3d _sdfMinPoint, _sdfMaxPoint;
     double _sdfResolution;
     bool _sdfInitialized = false;
 
-    bool isShortcutCollisionFree(const TrajectorySegment &shortcut);
     void generateInitialTrajectory();
     void convertToTimeOptimal();
-    std::vector<MotionGenerator::TrajectoryPoint> computeTimeOptimalSegment(
-        const TrajectoryPoint &start, const TrajectoryPoint &end, double startTime);
-    Eigen::MatrixXd computeAMatrix(int N, double dt);
-    double computeCost(const RobotArm &curArm,
-                       const RobotArm &prevArm,
-                       double dt,
-                       Eigen::VectorXd &jointVelocity);
-    double computeCost(const RobotArm &arm);
-    std::vector<double> computeEndeffectorSpeedOverPath();
-    double computeObstacleCost(const RobotArm &curArm, const RobotArm &prevArm, double dt);
-    double computeTrajectoryCost(const Eigen::MatrixXd &theta);
-    double computeCost(const RobotArm &curArm, const RobotArm &prevArm, double dt);
-    double computeTrajectoryCost(const Eigen::MatrixXd &theta, double dt);
     void initializeMatrices(const int &N, const double &dt);
-    std::vector<Eigen::MatrixXd> generateNoisyTrajectories(
-        const Eigen::MatrixXd &theta,
-        const Eigen::VectorXd &startVec,
-        const Eigen::VectorXd &goalVec,
-        std::vector<std::pair<double, double>> limits,
-        Eigen::VectorXd jointStdDevs,
-        int K,
-        int N,
-        int D);
-    Eigen::VectorXd evaluateQuinticPolynomial(const std::vector<Eigen::VectorXd> &coeffs, double t);
-    std::vector<Eigen::VectorXd> generateQuinticPolynomialCoeffs(const Eigen::VectorXd &start,
-                                                                 const Eigen::VectorXd &end,
-                                                                 double T);
-    Eigen::VectorXd computeTorques(const RobotArm &arm,
-                                   const Eigen::VectorXd &velocities,
-                                   const Eigen::VectorXd &accelerations);
+    Eigen::MatrixXd initializeTrajectory(Eigen::Matrix<double, 7, 1> goalVec,
+                                                      Eigen::Matrix<double, 7, 1> startVec,
+                                                      int N,
+                                                      const int D);
     Eigen::MatrixXd smoothTrajectoryUpdate(const Eigen::MatrixXd &theta);
-
-    /**
-     * @brief Apply quintic polynomial fitting to resample trajectory at desired output frequency
-     * @param trajectory Input trajectory matrix (N x 7)
-     * @param inputDt Time step of input trajectory
-     * @param outputFrequency Desired output frequency in Hz
-     * @return Resampled trajectory with zero boundary conditions
-     */
-    Eigen::MatrixXd applyQuinticPolynomialResampling(const Eigen::MatrixXd &trajectory, 
-                                                     double inputDt, 
-                                                     double outputFrequency);
-
-    /**
-     * @brief Apply quintic polynomial fitting with non-uniform time spacing
-     * @param trajectory Input trajectory matrix (N x 7)
-     * @param times Time vector corresponding to trajectory points
-     * @param outputFrequency Desired output frequency in Hz
-     * @return Resampled trajectory at uniform output frequency
-     */
-    Eigen::MatrixXd applyQuinticPolynomialResamplingWithTimes(const Eigen::MatrixXd &trajectory, 
-                                                              const Eigen::VectorXd &times, 
-                                                              double outputFrequency);
-
     Eigen::MatrixXd generateNoisyTrajectory(const Eigen::MatrixXd &baseTrajectory,
                                             const Eigen::VectorXd &stdDevs,
                                             const std::vector<std::pair<double, double>> &limits);
-    std::vector<TrajectoryPoint> computeTimeOptimalScaling(const std::vector<TrajectoryPoint> &path);
-    
-    /**
-     * @brief Improved pipeline: quintic polynomial fitting followed by time-optimal scaling
-     * @param rawPath Raw trajectory from STOMP with initial timing
-     * @param config STOMP configuration for output frequency
-     * @return Final trajectory with smooth geometry and constraint-satisfying timing
-     */
-    std::vector<TrajectoryPoint> processTrajectoryPipeline(const std::vector<TrajectoryPoint> &rawPath, 
-                                                           const StompConfig &config);
-    
-    // Helper functions for time-optimal trajectory generation
-    Eigen::MatrixXd computePathDerivatives(const std::vector<std::vector<double>>& jointPositions, 
-                                          const std::vector<double>& pathParams);
-    std::vector<double> computeVelocityLimits(const Eigen::MatrixXd& pathDerivatives);
-    std::vector<double> computeAccelerationLimits(const Eigen::MatrixXd& pathDerivatives, double jerkLimit);
-    double calculateSegmentTiming(double ds, double vPrev, double vNext);
-    
-    void initializeCostCalculatorCheckpoints();
+    void initializeCostCalculator();
     void initializeCostCalculatorCheckpoints(const std::vector<Eigen::VectorXd> &checkpoints);
-
 };
 
 #endif // MOTIONGENERATOR_H

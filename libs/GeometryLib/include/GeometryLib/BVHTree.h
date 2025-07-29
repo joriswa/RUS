@@ -92,6 +92,12 @@ public:
                                                         const Eigen::Vector3d &max_point,
                                                         double resolution) const;
 
+    /**
+     * @brief Get access to the root node for visualization purposes.
+     * @return Pointer to the root BVHNode, or nullptr if tree is empty.
+     */
+    const BVHNode* getRoot() const { return _root.get(); }
+
 private:
     std::unique_ptr<BVHNode> _root; ///< Root node of the BVH tree.
 
