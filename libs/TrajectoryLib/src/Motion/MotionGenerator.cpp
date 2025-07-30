@@ -346,28 +346,40 @@ std::vector<Eigen::MatrixXd> MotionGenerator::generateNoisySamples(
 {
     int actualBestSamples = std::min(config.numBestSamples, static_cast<int>(bestSamples.size()));
     std::vector<Eigen::MatrixXd> noisyTrajectories(config.numNoisyTrajectories + actualBestSamples);
-    std::vector<std::promise<void>> promises(config.numNoisyTrajectories);
-    std::vector<std::future<void>> futures;
-    for (auto &promise : promises) {
-        futures.push_back(promise.get_future());
+    
+    // Check if internal parallelization is disabled (for batch mode optimization)
+    if (config.disableInternalParallelization) {
+        // Sequential generation for better batch-level parallelization
+        for (int k = 0; k < config.numNoisyTrajectories; ++k) {
+            noisyTrajectories[k] = generateNoisyTrajectory(theta, config.jointStdDevs, limits);
+        }
+    } else {
+        // Original parallel generation for single trajectory optimization
+        std::vector<std::promise<void>> promises(config.numNoisyTrajectories);
+        std::vector<std::future<void>> futures;
+        for (auto &promise : promises) {
+            futures.push_back(promise.get_future());
+        }
+        for (int k = 0; k < config.numNoisyTrajectories; ++k) {
+            boost::asio::dispatch(*pool,
+                                  [this, k, &noisyTrajectories, &theta, &config, &limits, &promises]() {
+                                      try {
+                                          noisyTrajectories[k]
+                                              = generateNoisyTrajectory(theta,
+                                                                        config.jointStdDevs,
+                                                                        limits);
+                                          promises[k].set_value();
+                                      } catch (...) {
+                                          promises[k].set_exception(std::current_exception());
+                                      }
+                                  });
+        }
+        for (auto &future : futures) {
+            future.wait();
+        }
     }
-    for (int k = 0; k < config.numNoisyTrajectories; ++k) {
-        boost::asio::dispatch(*pool,
-                              [this, k, &noisyTrajectories, &theta, &config, &limits, &promises]() {
-                                  try {
-                                      noisyTrajectories[k]
-                                          = generateNoisyTrajectory(theta,
-                                                                    config.jointStdDevs,
-                                                                    limits);
-                                      promises[k].set_value();
-                                  } catch (...) {
-                                      promises[k].set_exception(std::current_exception());
-                                  }
-                              });
-    }
-    for (auto &future : futures) {
-        future.wait();
-    }
+    
+    // Add best samples from previous iterations
     for (int b = 0; b < actualBestSamples; b++) {
         noisyTrajectories[config.numNoisyTrajectories + b] = bestSamples[b].first;
     }
@@ -382,26 +394,39 @@ std::pair<std::vector<double>, Eigen::VectorXd> MotionGenerator::evaluateTraject
     int totalSamples = static_cast<int>(trajectories.size());
     std::vector<double> costs(totalSamples);
     Eigen::VectorXd costVector(totalSamples);
-    std::vector<std::promise<void>> promises(totalSamples);
-    std::vector<std::future<void>> futures;
-    for (auto &promise : promises) {
-        futures.push_back(promise.get_future());
+    
+    // Check if internal parallelization is disabled (for batch mode optimization)
+    if (config.disableInternalParallelization) {
+        // Sequential evaluation for better batch-level parallelization
+        for (int k = 0; k < totalSamples; k++) {
+            double trajectoryCost = _costCalculator->computeCost(trajectories[k], dt);
+            costs[k] = trajectoryCost;
+            costVector(k) = trajectoryCost;
+        }
+    } else {
+        // Original parallel evaluation for single trajectory optimization
+        std::vector<std::promise<void>> promises(totalSamples);
+        std::vector<std::future<void>> futures;
+        for (auto &promise : promises) {
+            futures.push_back(promise.get_future());
+        }
+        for (int k = 0; k < totalSamples; k++) {
+            boost::asio::dispatch(*pool, [this, k, &trajectories, &costs, &costVector, dt, &promises]() {
+                try {
+                    double trajectoryCost = _costCalculator->computeCost(trajectories[k], dt);
+                    costs[k] = trajectoryCost;
+                    costVector(k) = trajectoryCost;
+                    promises[k].set_value();
+                } catch (...) {
+                    promises[k].set_exception(std::current_exception());
+                }
+            });
+        }
+        for (auto &future : futures) {
+            future.wait();
+        }
     }
-    for (int k = 0; k < totalSamples; k++) {
-        boost::asio::dispatch(*pool, [this, k, &trajectories, &costs, &costVector, dt, &promises]() {
-            try {
-                double trajectoryCost = _costCalculator->computeCost(trajectories[k], dt);
-                costs[k] = trajectoryCost;
-                costVector(k) = trajectoryCost;
-                promises[k].set_value();
-            } catch (...) {
-                promises[k].set_exception(std::current_exception());
-            }
-        });
-    }
-    for (auto &future : futures) {
-        future.wait();
-    }
+    
     double minCost = costVector.minCoeff();
     double maxCost = costVector.maxCoeff();
     double costRange = maxCost - minCost;

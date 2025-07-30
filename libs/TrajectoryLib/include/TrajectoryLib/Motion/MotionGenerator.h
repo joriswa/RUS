@@ -98,6 +98,7 @@ struct StompConfig
     bool enableEarlyStopping = false;      ///< Enable early stopping when collision-free trajectory found
     int earlyStoppingPatience = 1;         ///< Number of consecutive collision-free iterations before stopping
     double maxComputeTimeMs = 0.0;         ///< Maximum computation time in milliseconds (0 = no limit)
+    bool disableInternalParallelization = false; ///< Disable internal STOMP parallelization for batch mode optimization
 };
 
 /**

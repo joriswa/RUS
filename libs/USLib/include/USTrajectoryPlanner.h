@@ -21,15 +21,20 @@ struct HardwareConfig {
     unsigned int logicalCores;
     unsigned int physicalCores;
     size_t batchSize;
+    size_t optimalThreadsForFlatParallelization;
     
     /**
-     * @brief Detect hardware configuration
+     * @brief Detect hardware configuration optimized for flat parallelization
      */
     static HardwareConfig detect() {
         HardwareConfig config;
         config.logicalCores = std::thread::hardware_concurrency();
         config.physicalCores = std::max(1u, config.logicalCores);
-        config.batchSize = std::max(1UL, static_cast<size_t>(config.physicalCores) / 2); 
+        
+        // Optimized for flat parallelization: use more threads for trajectory-level parallelism
+        config.optimalThreadsForFlatParallelization = config.physicalCores;
+        config.batchSize = std::max(2UL, static_cast<size_t>(config.physicalCores) / 4); 
+        
         return config;
     }
 };
@@ -113,7 +118,7 @@ public:
     void printSegmentTimes() const;
     
     /**
-     * @brief Plan multiple trajectories using STOMP with fallback
+     * @brief Plan multiple trajectories using STOMP with fallback and workload-aware parallelization
      * @param requests Start and target joint configurations
      * @param descriptions Trajectory descriptions for logging
      * @param enableShortcutting Apply path shortcutting
@@ -125,7 +130,7 @@ public:
         bool enableShortcutting = true);
         
     /**
-     * @brief Plan multiple trajectories using RRT+Hauser optimization
+     * @brief Plan multiple trajectories using RRT+Hauser optimization with workload-aware parallelization
      * @param requests Start and target joint configurations  
      * @param descriptions Trajectory descriptions for logging
      * @param enableShortcutting Apply path shortcutting
@@ -201,4 +206,11 @@ private:
      * @return Motion generator with shared SDF
      */
     std::unique_ptr<MotionGenerator> createMotionGeneratorWithSharedSdf(const RobotArm& arm);
+    
+    /**
+     * @brief Determine optimal parallelization strategy based on workload
+     * @param numTrajectories Number of trajectories to plan
+     * @return True if flat parallelization should be used, false for hierarchical
+     */
+    bool shouldUseFlatParallelization(size_t numTrajectories) const;
 };

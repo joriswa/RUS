@@ -325,7 +325,7 @@ void UltrasoundScanTrajectoryPlanner::initializeThreadPool()
 {
     if (!_sharedThreadPool) {
         const auto &config = _hardwareConfig;
-        size_t optimalThreads = config.physicalCores;
+        size_t optimalThreads = config.optimalThreadsForFlatParallelization;
 
         _sharedThreadPool = std::make_shared<boost::asio::thread_pool>(optimalThreads);
 
@@ -335,6 +335,9 @@ void UltrasoundScanTrajectoryPlanner::initializeThreadPool()
                 std::this_thread::sleep_for(std::chrono::microseconds(1));
             });
         }
+        
+        LOG_INFO << "Thread pool initialized with " << optimalThreads 
+                 << " threads for flat parallelization";
     }
 }
 
@@ -355,6 +358,9 @@ std::vector<Trajectory> UltrasoundScanTrajectoryPlanner::planTrajectoryBatch(
     
     // Initialize shared SDF before parallel processing to avoid race conditions
     initializeSharedSdf();
+    
+    // Determine optimal parallelization strategy based on workload
+    bool useFlatParallelization = shouldUseFlatParallelization(requests.size());
 
     std::vector<Trajectory> results(requests.size());
     std::vector<std::future<void>> futures;
@@ -378,13 +384,16 @@ std::vector<Trajectory> UltrasoundScanTrajectoryPlanner::planTrajectoryBatch(
                                          &results,
                                          &completedTrajectories,
                                          &successfulTrajectories,
-                                         enableShortcutting]() {
+                                         enableShortcutting,
+                                         useFlatParallelization]() {
                     try {
                         const auto &startJoints = requests[j].first;
                         const auto &targetJoints = requests[j].second;
                         
                         auto localGenerator = createMotionGeneratorWithSharedSdf(*_arm);
                         StompConfig config;
+                        // Set parallelization strategy based on workload analysis
+                        config.disableInternalParallelization = useFlatParallelization;
 
                         Eigen::MatrixXd waypoints(2, startJoints.size());
                         waypoints.row(0) = startJoints.transpose();
@@ -418,6 +427,8 @@ std::vector<Trajectory> UltrasoundScanTrajectoryPlanner::planTrajectoryBatch(
                             step1Generator->setWaypoints(step1Waypoints);
 
                             StompConfig fallBackConfig;
+                            // Use same parallelization strategy for fallback
+                            fallBackConfig.disableInternalParallelization = useFlatParallelization;
 
                             bool step1Success = false;
                             try {
@@ -496,10 +507,18 @@ std::vector<Trajectory> UltrasoundScanTrajectoryPlanner::planTrajectoryBatch(
     auto endTime = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
 
-    LOG_INFO << "Batch planning complete: " << successfulTrajectories << "/" << requests.size()
+    // Performance metrics logging
+    double trajectoryThroughput = (double)successfulTrajectories / (duration.count() / 1000.0);
+    double avgTimePerTrajectory = (double)duration.count() / requests.size();
+    
+    LOG_INFO << "Batch planning complete (" << (useFlatParallelization ? "FLAT" : "HIERARCHICAL") << "): " 
+             << successfulTrajectories << "/" << requests.size()
              << " (" << std::fixed << std::setprecision(1) 
              << (100.0 * successfulTrajectories / requests.size()) << "%) in "
              << duration.count() << "ms";
+    LOG_INFO << "Performance: " << std::fixed << std::setprecision(2) 
+             << trajectoryThroughput << " trajectories/sec, " 
+             << avgTimePerTrajectory << "ms avg/trajectory";
 
     return results;
 }
@@ -518,6 +537,9 @@ std::vector<Trajectory> UltrasoundScanTrajectoryPlanner::planTrajectoryBatchHaus
     LOG_INFO << "Hauser batch planning: " << requests.size() << " trajectories";
 
     initializeThreadPool();
+    
+    // Determine optimal parallelization strategy (Hauser doesn't use internal parallelization currently)
+    bool useFlatParallelization = shouldUseFlatParallelization(requests.size());
 
     std::vector<Trajectory> results(requests.size());
     std::vector<std::future<void>> futures;
@@ -542,7 +564,8 @@ std::vector<Trajectory> UltrasoundScanTrajectoryPlanner::planTrajectoryBatchHaus
                                          &results,
                                          &completedTrajectories,
                                          &successfulTrajectories,
-                                         enableShortcutting]() {
+                                         enableShortcutting,
+                                         useFlatParallelization]() {
                     try {
                         // Each thread gets its own motion generator to avoid contention
                         MotionGenerator localGenerator(*_arm);
@@ -649,10 +672,18 @@ std::vector<Trajectory> UltrasoundScanTrajectoryPlanner::planTrajectoryBatchHaus
     auto endTime = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
 
-    LOG_INFO << "Hauser batch complete: " << successfulTrajectories << "/" << requests.size()
+    // Performance metrics logging for Hauser
+    double trajectoryThroughput = (double)successfulTrajectories / (duration.count() / 1000.0);
+    double avgTimePerTrajectory = (double)duration.count() / requests.size();
+    
+    LOG_INFO << "Hauser batch complete (" << (useFlatParallelization ? "FLAT" : "HIERARCHICAL") << "): " 
+             << successfulTrajectories << "/" << requests.size()
              << " (" << std::fixed << std::setprecision(1) 
              << (100.0 * successfulTrajectories / requests.size()) << "%) in "
              << duration.count() << "ms";
+    LOG_INFO << "Performance: " << std::fixed << std::setprecision(2) 
+             << trajectoryThroughput << " trajectories/sec, " 
+             << avgTimePerTrajectory << "ms avg/trajectory";
 
     return results;
 }
@@ -883,6 +914,21 @@ std::unique_ptr<MotionGenerator> UltrasoundScanTrajectoryPlanner::createMotionGe
         }
         return generator;
     }
+}
+
+bool UltrasoundScanTrajectoryPlanner::shouldUseFlatParallelization(size_t numTrajectories) const
+{
+    // Workload-aware parallelization strategy:
+    // - Small batches (≤ physicalCores): Use hierarchical (internal STOMP parallelization)
+    // - Large batches (> physicalCores): Use flat (trajectory-level parallelization)
+    const size_t threshold = _hardwareConfig.physicalCores;
+    bool useFlatParallelization = numTrajectories > threshold;
+    
+    LOG_DEBUG << "Parallelization strategy for " << numTrajectories << " trajectories: "
+              << (useFlatParallelization ? "FLAT" : "HIERARCHICAL")
+              << " (threshold: " << threshold << " cores)";
+    
+    return useFlatParallelization;
 }
 
 void UltrasoundScanTrajectoryPlanner::printSegmentTimes() const
