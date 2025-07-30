@@ -1,53 +1,155 @@
-# TrajectoryLib Documentation
+# TrajectoryLib planTrajectories Documentation
 
-This directory contains comprehensive documentation for the TrajectoryLib library, the core trajectory planning and optimization component of the Robotic Ultrasound System (RUS).
+This directory contains comprehensive architecture documentation specifically focused on the functionality required by the `UltrasoundScanTrajectoryPlanner::planTrajectories()` method, which serves as the primary entry point for ultrasound scan trajectory planning.
 
-## Architecture Documentation
+## planTrajectories-Focused Documentation
 
 ### 📐 [TrajectoryLib Architecture Diagram](TrajectoryLib_Architecture_Diagram.md)
-A high-level architectural overview showing:
-- Module organization and relationships
-- External dependencies and integration points
-- Data flow and system interfaces
-- Key components and their interactions
+planTrajectories-specific architectural analysis showing:
+- Core functionality requirements and data flow
+- Required component dependencies (RobotManager, BVHTree, PathPlanner, MotionGenerator)
+- Complete planTrajectories data flow with sequence diagrams
+- Algorithm integration (STOMP optimization pipeline, RRT+Hauser pipeline)
+- Performance optimizations (SDF caching, batch processing)
+- System integration requirements and external library dependencies
 
-### 🏗️ [Detailed Class Architecture](TrajectoryLib_Detailed_Class_Diagram.md)
-Comprehensive class-level documentation including:
-- Detailed class diagrams with methods and properties
-- Design patterns and architectural decisions
-- Memory management and thread safety
-- Performance optimization features
+### 🏗️ [Detailed Implementation Analysis](TrajectoryLib_Detailed_Class_Diagram.md)
+Comprehensive implementation documentation including:
+- UltrasoundScanTrajectoryPlanner class detailed breakdown
+- PathPlanner component with CheckpointPlanResult structure
+- MotionGenerator component with STOMP and Hauser integration
+- Robot component hierarchy (RobotArm, RobotManager)
+- Collision detection system (BVHTree, ArmFeasibilityChecker)
+- Data flow implementation with method-level detail
+- Performance implementation (ThreadPoolManager, SDFCacheManager)
+- Error handling and fallback mechanisms
 
-## Key Features
+### 📊 [Visual Summary and Quick Reference](TrajectoryLib_Visual_Summary.md)
+Quick reference and troubleshooting guide including:
+- ASCII-based data flow diagrams suitable for terminal viewing
+- Component interaction matrix showing planTrajectories dependencies
+- Algorithm decision tree for STOMP vs Hauser selection
+- Performance characteristics with visual charts
+- Data structure quick reference (TrajectoryPoint, CheckpointPlanResult, StompConfig)
+- Troubleshooting guide with common issues and solutions
+- Integration checklist for planTrajectories implementation
 
-### Core Capabilities
-- **STOMP Optimization**: Stochastic Trajectory Optimization for Motion Planning
-- **Path Planning**: RRT and RRT* algorithms for initial path generation
-- **Robot Kinematics**: Forward/inverse kinematics with multiple robot support
-- **Collision Detection**: Efficient spatial indexing with BVH trees
-- **Multi-threading**: Parallel optimization for real-time performance
+## planTrajectories Core Functionality
 
-### Architecture Highlights
-- **Modular Design**: Six distinct modules (Core, Motion, Planning, Robot, Utils, Visualization)
-- **Plugin Architecture**: Extensible cost functions and planning algorithms  
-- **Safety-Critical**: Medical-grade reliability and error handling
-- **High Performance**: Multi-threaded STOMP with SIMD optimization
+### Function Overview
+The `planTrajectories` method orchestrates multiple TrajectoryLib components to generate collision-free, time-optimal paths for both repositioning movements and contact-force scanning operations.
 
-## Module Overview
+```cpp
+bool planTrajectories(bool useHauserForRepositioning = false, 
+                     bool enableShortcutting = true)
 
-| Module | Purpose | Key Components |
-|--------|---------|----------------|
-| **Core** | Utilities and basic algorithms | Util, spline, SimulatedAnnealing |
-| **Motion** | Trajectory optimization | MotionGenerator (STOMP), CostCalculators |  
-| **Planning** | Path planning algorithms | PathPlanner, RRT, RRT* |
-| **Robot** | Robot modeling and kinematics | Robot, RobotArm, RobotManager |
-| **Utils** | Analysis and evaluation | TrajectoryEvaluator |
-| **Visualization** | 3D rendering support | TrackballCameraController |
+// Input Requirements:
+// - Environment URDF string (setEnvironment)
+// - Current 7-DOF joint configuration (setCurrentJoints)  
+// - Target scan poses sequence (setPoses)
 
-## Dependencies
+// Output:
+// - Complete trajectory sequence with contact force flags
+// - Optimized for hardware performance and safety
+```
 
-### External Libraries
-- **Qt Framework**: GUI, OpenGL, 3D rendering
+### Key Implementation Features
+
+#### Core Functionality Chain
+1. **Environment Processing**: URDF parsing → BVHTree construction → Obstacle management
+2. **Checkpoint Planning**: Pose sequence → IK solving → Validity checking → Segment grouping
+3. **Batch Trajectory Planning**: Request building → Algorithm selection → Parallel optimization
+4. **Contact Generation**: Valid segments → Time-optimal trajectories → Contact force flags
+5. **Validation**: Discontinuity detection → Correction segments → Final validation
+
+#### Performance Optimizations
+- **Shared SDF Caching**: Memory-efficient collision detection across threads
+- **Hardware-Aware Batching**: CPU core detection and optimal batch size calculation
+- **Parallel Processing**: Multi-threaded STOMP/Hauser optimization
+- **Two-Step Fallback**: Robust error recovery for failed optimizations
+
+#### Algorithm Integration
+- **STOMP Pipeline**: Stochastic optimization with research-tuned parameters
+- **RRT+Hauser Pipeline**: Sampling-based planning with physics-aware smoothing
+- **Runtime Selection**: Algorithm choice based on quality vs speed requirements
+
+## Component Dependencies
+
+### Required Components for planTrajectories
+
+| Component | Purpose | Key Usage |
+|-----------|---------|-----------|
+| **RobotManager** | URDF parsing and obstacle extraction | Environment setup phase |
+| **BVHTree** | Collision detection and spatial queries | Real-time collision checking |
+| **PathPlanner** | Checkpoint planning and IK solving | Pose sequence processing |
+| **MotionGenerator** | STOMP/Hauser trajectory optimization | Batch trajectory planning |
+| **RobotArm** | Kinematics and configuration management | Throughout all phases |
+| **ThreadPool** | Parallel processing coordination | Batch optimization |
+| **SDF Cache** | Shared collision distance queries | Performance optimization |
+
+### External Dependencies
+
+| Library | Usage in planTrajectories | Critical Functions |
+|---------|---------------------------|-------------------|
+| **Eigen3** | Linear algebra, pose transformations | VectorXd, Affine3d operations |
+| **Boost** | Thread pool, mathematical functions | asio::thread_pool, geometry |
+| **orocos_kdl** | Kinematics calculations | Forward/inverse kinematics |
+| **Hauser10** | Time-optimal trajectory generation | DynamicPath, ParabolicRamp |
+| **GeometryLib** | Collision detection infrastructure | BVHTree, ObstacleTree |
+| **Qt Framework** | Logging and system utilities | QDebug, QObject |
+
+## Integration Examples
+
+### Basic planTrajectories Usage
+```cpp
+// Setup
+UltrasoundScanTrajectoryPlanner planner(urdfEnvironment);
+planner.setCurrentJoints(currentJointConfig);
+planner.setPoses(scanPoseSequence);
+
+// Planning
+bool success = planner.planTrajectories(false, true); // STOMP + shortcutting
+
+// Execution
+if (success) {
+    auto trajectories = planner.getTrajectories();
+    for (const auto& [points, isContactForce] : trajectories) {
+        if (isContactForce) {
+            executeContactTrajectory(points);
+        } else {
+            executeRepositioningTrajectory(points);
+        }
+    }
+}
+```
+
+### Error Handling Pattern
+```cpp
+try {
+    bool success = planner.planTrajectories();
+    if (!success) {
+        LOG_ERROR << "Trajectory planning failed";
+        return false;
+    }
+} catch (const StompFailedException& e) {
+    LOG_WARNING << "STOMP failed: " << e.what();
+    // Try Hauser fallback
+    success = planner.planTrajectories(true, true);
+} catch (const std::runtime_error& e) {
+    LOG_ERROR << "Planning error: " << e.what();
+    return false;
+}
+```
+
+## Documentation Navigation
+
+For detailed implementation guidance, follow the role-based reading paths in [ARCHITECTURE_INDEX.md](ARCHITECTURE_INDEX.md):
+
+- **Developers**: Implementation details and code examples
+- **System Integrators**: API usage and integration patterns  
+- **Performance Engineers**: Optimization strategies and tuning
+
+This documentation suite provides **1,700+ lines** of comprehensive planTrajectories-focused analysis, enabling effective development, integration, and optimization of ultrasound scan trajectory planning systems.
 - **Eigen3**: Linear algebra and matrix operations
 - **Boost**: Mathematical functions and threading
 - **orocos_kdl**: Kinematics and dynamics library
