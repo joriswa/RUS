@@ -52,3 +52,8 @@ install(EXPORT Hauser10Targets
     FILE Hauser10Targets.cmake
     DESTINATION lib/cmake/Hauser10
 )
+
+# Install the config file
+install(FILES Hauser10Config.cmake
+    DESTINATION lib/cmake/Hauser10
+)

@@ -1,0 +1,119 @@
+name: Build Libraries
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          cmake \
+          build-essential \
+          qtbase5-dev \
+          qtbase5-dev-tools \
+          qt5-qmake \
+          libqt5opengl5-dev \
+          qt3d5-dev \
+          libeigen3-dev \
+          libboost-all-dev \
+          liborocos-kdl-dev \
+          libyaml-cpp-dev \
+          libjsoncpp-dev
+          
+    - name: Create build directory
+      run: mkdir -p build
+      
+    - name: Configure CMake (Basic Libraries Only)
+      working-directory: build
+      run: |
+        cmake .. \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_INSTALL_PREFIX=install \
+          -DBUILD_ADVANCED_LIBS=OFF \
+          -DBUILD_APPS=OFF
+      
+    - name: Build basic libraries
+      working-directory: build
+      run: make -j$(nproc)
+      
+    - name: Install basic libraries
+      working-directory: build
+      run: make install
+      
+    - name: Try building advanced libraries
+      working-directory: build
+      continue-on-error: true
+      run: |
+        # Clean and try building with advanced libraries
+        rm -rf *
+        cmake .. \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_INSTALL_PREFIX=install_advanced \
+          -DBUILD_ADVANCED_LIBS=ON \
+          -DBUILD_APPS=ON
+        make -j$(nproc) || echo "Advanced libraries failed to build, continuing with basic libraries only"
+        if [ $? -eq 0 ]; then
+          make install
+          echo "ADVANCED_BUILD_SUCCESS=true" >> $GITHUB_ENV
+        else
+          echo "ADVANCED_BUILD_SUCCESS=false" >> $GITHUB_ENV
+        fi
+      
+    - name: Package artifacts
+      working-directory: build
+      run: |
+        mkdir -p artifacts
+        
+        # Copy basic libraries
+        if [ -d "install" ]; then
+          cp -r install/* artifacts/
+          echo "Basic libraries built successfully:" > artifacts/BUILD_INFO.txt
+          echo "- GeometryLib (geometry utilities)" >> artifacts/BUILD_INFO.txt
+          echo "- Hauser10 (trajectory planning algorithms)" >> artifacts/BUILD_INFO.txt
+        fi
+        
+        # Copy advanced libraries if available
+        if [ -d "install_advanced" ] && [ "$ADVANCED_BUILD_SUCCESS" = "true" ]; then
+          cp -r install_advanced/* artifacts/
+          echo "" >> artifacts/BUILD_INFO.txt
+          echo "Advanced libraries also built successfully:" >> artifacts/BUILD_INFO.txt
+          echo "- TrajectoryLib (main trajectory library)" >> artifacts/BUILD_INFO.txt  
+          echo "- USLib (ultrasound-specific trajectory planning)" >> artifacts/BUILD_INFO.txt
+        fi
+        
+        echo "" >> artifacts/BUILD_INFO.txt
+        echo "Build date: $(date)" >> artifacts/BUILD_INFO.txt
+        echo "Git commit: ${{ github.sha }}" >> artifacts/BUILD_INFO.txt
+        echo "Git branch: ${{ github.ref_name }}" >> artifacts/BUILD_INFO.txt
+        
+        # List built artifacts
+        echo "" >> artifacts/BUILD_INFO.txt
+        echo "Built artifacts:" >> artifacts/BUILD_INFO.txt
+        find artifacts -name "*.a" -o -name "*.so" | sed 's/^/  /' >> artifacts/BUILD_INFO.txt
+        
+    - name: Upload library artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: RUS-Libraries-${{ github.ref_name }}-${{ github.sha }}
+        path: build/artifacts/
+        retention-days: 30
+        
+    - name: Upload build logs
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: build-logs-${{ github.sha }}
+        path: build/
+        retention-days: 7

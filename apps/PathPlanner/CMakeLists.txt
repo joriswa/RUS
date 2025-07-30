@@ -7,8 +7,17 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets OpenGL OpenGLWidgets 3DCore 3DRender 3DInput 3DExtras)
-find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets OpenGL OpenGLWidgets 3DCore 3DRender 3DInput 3DExtras)
+find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets OpenGL 3DCore 3DRender 3DInput 3DExtras)
+find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets OpenGL 3DCore 3DRender 3DInput 3DExtras)
+
+# Try to find OpenGLWidgets if available (Qt6 feature)
+find_package(Qt${QT_VERSION_MAJOR} QUIET COMPONENTS OpenGLWidgets)
+if(Qt${QT_VERSION_MAJOR}OpenGLWidgets_FOUND)
+    set(QT_OPENGL_WIDGETS_AVAILABLE TRUE)
+else()
+    set(QT_OPENGL_WIDGETS_AVAILABLE FALSE)
+    message(STATUS "Qt${QT_VERSION_MAJOR}OpenGLWidgets not found, using OpenGL instead")
+endif()
 
 add_definitions(-DQT_NO_VERSION_TAGGING)
 
@@ -31,15 +40,24 @@ else()
         ${PROJECT_SOURCES})
 endif()
 
-target_link_libraries(PathPlanner PRIVATE
-    USLib
+# Link dependencies
+set(QT_LIBRARIES
     Qt${QT_VERSION_MAJOR}::Widgets
     Qt${QT_VERSION_MAJOR}::OpenGL
-    Qt${QT_VERSION_MAJOR}::OpenGLWidgets
     Qt${QT_VERSION_MAJOR}::3DCore
     Qt${QT_VERSION_MAJOR}::3DRender
     Qt${QT_VERSION_MAJOR}::3DInput
     Qt${QT_VERSION_MAJOR}::3DExtras
+)
+
+# Add OpenGLWidgets if available
+if(QT_OPENGL_WIDGETS_AVAILABLE)
+    list(APPEND QT_LIBRARIES Qt${QT_VERSION_MAJOR}::OpenGLWidgets)
+endif()
+
+target_link_libraries(PathPlanner PRIVATE
+    USLib
+    ${QT_LIBRARIES}
 )
 
 if(${QT_VERSION} VERSION_LESS 6.1.0)
