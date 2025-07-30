@@ -42,3 +42,8 @@ install(EXPORT GeometryLibTargets
     FILE GeometryLibTargets.cmake
     DESTINATION lib/cmake/GeometryLib
 )
+
+# Install the config file
+install(FILES GeometryLibConfig.cmake
+    DESTINATION lib/cmake/GeometryLib
+)

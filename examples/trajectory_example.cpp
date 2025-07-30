@@ -21,11 +21,11 @@ int main() {
     // Solve for minimum time trajectory
     if (ramp.SolveMinTime(amax, vmax)) {
         std::cout << "Successfully computed trajectory:" << std::endl;
-        std::cout << "  Duration: " << ramp.endTime << " seconds" << std::endl;
+        std::cout << "  Duration: " << ramp.EndTime() << " seconds" << std::endl;
         std::cout << "  Switch time: " << ramp.tswitch1 << " seconds" << std::endl;
         
         // Evaluate trajectory at different times
-        double t_mid = ramp.endTime / 2.0;
+        double t_mid = ramp.EndTime() / 2.0;
         double pos_mid = ramp.Evaluate(t_mid);
         double vel_mid = ramp.Derivative(t_mid);
         
