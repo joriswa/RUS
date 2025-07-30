@@ -30,7 +30,6 @@ endif()
 include_directories(${orocos_kdl_INCLUDE_DIRS})
 
 # Add external dependencies
-add_subdirectory(tinyurdfparser)
 
 # Add library modules in dependency order
 add_subdirectory(libs/GeometryLib)
