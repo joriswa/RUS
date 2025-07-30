@@ -7,8 +7,17 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets OpenGL OpenGLWidgets)
-find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets OpenGL OpenGLWidgets)
+find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets OpenGL)
+find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets OpenGL)
+
+# Try to find OpenGLWidgets if available (Qt6 feature)
+find_package(Qt${QT_VERSION_MAJOR} QUIET COMPONENTS OpenGLWidgets)
+if(Qt${QT_VERSION_MAJOR}OpenGLWidgets_FOUND)
+    set(QT_OPENGL_WIDGETS_AVAILABLE TRUE)
+else()
+    set(QT_OPENGL_WIDGETS_AVAILABLE FALSE)
+    message(STATUS "Qt${QT_VERSION_MAJOR}OpenGLWidgets not found, using OpenGL instead")
+endif()
 find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS 3DCore 3DExtras 3DInput 3DLogic 3DRender Concurrent)
 find_package(Eigen3 3.3 REQUIRED)
 find_package(Boost REQUIRED COMPONENTS math_c99 system)
@@ -47,17 +56,26 @@ target_include_directories(TrajectoryLib PUBLIC
 )
 
 # Link dependencies
-target_link_libraries(TrajectoryLib PUBLIC
-    GeometryLib
-    Hauser10
+set(QT_LIBRARIES
     Qt${QT_VERSION_MAJOR}::Widgets
-    Qt${QT_VERSION_MAJOR}::OpenGLWidgets
+    Qt${QT_VERSION_MAJOR}::OpenGL
     Qt${QT_VERSION_MAJOR}::Concurrent
     Qt${QT_VERSION_MAJOR}::3DCore
     Qt${QT_VERSION_MAJOR}::3DExtras
     Qt${QT_VERSION_MAJOR}::3DInput
     Qt${QT_VERSION_MAJOR}::3DLogic
     Qt${QT_VERSION_MAJOR}::3DRender
+)
+
+# Add OpenGLWidgets if available
+if(QT_OPENGL_WIDGETS_AVAILABLE)
+    list(APPEND QT_LIBRARIES Qt${QT_VERSION_MAJOR}::OpenGLWidgets)
+endif()
+
+target_link_libraries(TrajectoryLib PUBLIC
+    GeometryLib
+    Hauser10
+    ${QT_LIBRARIES}
     Eigen3::Eigen
     ${Boost_LIBRARIES}
     ${orocos_kdl_LIBRARIES}
