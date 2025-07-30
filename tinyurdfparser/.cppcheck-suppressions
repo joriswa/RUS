@@ -1,4 +1,0 @@
-*:src/apps/utils/*
-useInitializationList
-unusedStructMember
-unmatchedSuppression
