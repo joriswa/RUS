@@ -311,7 +311,9 @@ MotionGenerator::STOMPInitData MotionGenerator::initializeSTOMPExecution(
     if (sharedPool) {
         initData.pool = sharedPool.get();
     } else {
-        unsigned int numThreads = std::max(2u, std::thread::hardware_concurrency() / 2);
+        // FIXED: Handle case where hardware_concurrency() returns 0
+        unsigned int hwThreads = std::thread::hardware_concurrency();
+        unsigned int numThreads = hwThreads > 0 ? std::max(2u, hwThreads / 2) : 4;
         initData.localPool = std::make_unique<boost::asio::thread_pool>(numThreads);
         initData.pool = initData.localPool.get();
     }
@@ -446,7 +448,10 @@ Eigen::MatrixXd MotionGenerator::applyTrajectoryUpdate(
     }
     Eigen::MatrixXd deltaS = smoothTrajectoryUpdate(deltaTheta);
     Eigen::MatrixXd updatedTheta = theta + config.learningRate * deltaS;
-    for (int i = 0; i < N - 1; i++) {
+    
+    // CRITICAL FIX: Only clamp intermediate waypoints (i=1 to N-2)
+    // Start waypoint (i=0) and goal waypoint (i=N-1) must remain fixed
+    for (int i = 1; i < N - 1; i++) {
         for (int d = 0; d < config.numJoints; d++) {
             updatedTheta(i, d) = std::clamp(updatedTheta(i, d), limits[d].first, limits[d].second);
         }
@@ -461,11 +466,12 @@ bool MotionGenerator::checkCollisions(const Eigen::MatrixXd &theta, int N)
     std::vector<std::future<void>> sparseFutures;
     for (int i = 1; i < N - 1; i += sparseStep) {
         sparseFutures.emplace_back(std::async(std::launch::async, [this, &theta, &collides, i]() {
-            if (!collides.load()) {
+            // FIXED: Use memory ordering for better thread safety
+            if (!collides.load(std::memory_order_acquire)) {
                 RobotArm checkArm = _arm;
                 checkArm.setJointAngles(theta.row(i));
                 if (armHasCollision(checkArm)) {
-                    collides.store(true);
+                    collides.store(true, std::memory_order_release);
                 }
             }
         }));
@@ -473,20 +479,20 @@ bool MotionGenerator::checkCollisions(const Eigen::MatrixXd &theta, int N)
     for (auto &future : sparseFutures) {
         future.wait();
     }
-    if (!collides.load()) {
+    if (!collides.load(std::memory_order_acquire)) {
         const int numThreads = std::min(4, std::max(1, numWaypoints / 8));
         const int waypointsPerThread = std::max(1, numWaypoints / numThreads);
         std::vector<std::future<void>> collisionFutures;
-        for (int t = 0; t < numThreads && !collides.load(); ++t) {
+        for (int t = 0; t < numThreads && !collides.load(std::memory_order_acquire); ++t) {
             int startIdx = t * waypointsPerThread + 1;
             int endIdx = (t == numThreads - 1) ? N - 1 : startIdx + waypointsPerThread;
             collisionFutures.emplace_back(
                 std::async(std::launch::async, [this, &theta, &collides, startIdx, endIdx]() {
                     RobotArm checkArm = _arm;
-                    for (int i = startIdx; i < endIdx && !collides.load(); ++i) {
+                    for (int i = startIdx; i < endIdx && !collides.load(std::memory_order_acquire); ++i) {
                         checkArm.setJointAngles(theta.row(i));
                         if (armHasCollision(checkArm)) {
-                            collides.store(true);
+                            collides.store(true, std::memory_order_release);
                             return;
                         }
                     }
@@ -496,7 +502,7 @@ bool MotionGenerator::checkCollisions(const Eigen::MatrixXd &theta, int N)
             future.wait();
         }
     }
-    return collides.load();
+    return collides.load(std::memory_order_acquire);
 }
 void MotionGenerator::updateConvergenceState(STOMPConvergenceState &state,
                                              const Eigen::MatrixXd &theta,
@@ -598,16 +604,29 @@ bool MotionGenerator::finalizeSTOMPResult(const Eigen::MatrixXd &theta,
         }
         if (i == 0) {
             for (int d = 0; d < config.numJoints; ++d) {
-                point.velocity[d] = (finalTheta(1, d) - finalTheta(0, d)) / dt;
-                point.acceleration[d] = (finalTheta(2, d) - 2 * finalTheta(1, d) + finalTheta(0, d))
-                                        / (dt * dt);
+                // FIXED: Use more stable forward finite difference or enforce zero boundary conditions
+                if (N >= 3) {
+                    // Second-order forward difference for better numerical stability
+                    point.velocity[d] = (-3*finalTheta(0, d) + 4*finalTheta(1, d) - finalTheta(2, d)) / (2*dt);
+                } else {
+                    // Fallback for short trajectories
+                    point.velocity[d] = (finalTheta(1, d) - finalTheta(0, d)) / dt;
+                }
+                // For boundary acceleration, enforce zero for stability (start at rest)
+                point.acceleration[d] = 0.0;
             }
         } else if (i == N - 1) {
             for (int d = 0; d < config.numJoints; ++d) {
-                point.velocity[d] = (finalTheta(N - 1, d) - finalTheta(N - 2, d)) / dt;
-                point.acceleration[d] = (finalTheta(N - 1, d) - 2 * finalTheta(N - 2, d)
-                                         + finalTheta(N - 3, d))
-                                        / (dt * dt);
+                // FIXED: Use more stable backward finite difference or enforce zero boundary conditions
+                if (N >= 3) {
+                    // Second-order backward difference for better numerical stability
+                    point.velocity[d] = (3*finalTheta(N-1, d) - 4*finalTheta(N-2, d) + finalTheta(N-3, d)) / (2*dt);
+                } else {
+                    // Fallback for short trajectories
+                    point.velocity[d] = (finalTheta(N - 1, d) - finalTheta(N - 2, d)) / dt;
+                }
+                // For boundary acceleration, enforce zero for stability (end at rest)
+                point.acceleration[d] = 0.0;
             }
         } else {
             for (int d = 0; d < config.numJoints; ++d) {
@@ -687,7 +706,14 @@ void MotionGenerator::initializeMatrices(const int &N, const double &dt)
     _L = llt.matrixL();
     _M = Rinv;
     for (int i = 0; i < N; i++) {
-        _M.col(i) *= (1.0 / N) / _M.col(i).cwiseAbs().maxCoeff();
+        // FIXED: Prevent division by zero when matrix column is all zeros
+        double maxCoeff = _M.col(i).cwiseAbs().maxCoeff();
+        if (maxCoeff > 1e-12) {  // Avoid division by zero with numerical tolerance
+            _M.col(i) *= (1.0 / N) / maxCoeff;
+        } else {
+            // If column is essentially zero, set it to a small uniform value
+            _M.col(i).setConstant(1e-6 / N);
+        }
     }
     _matricesInitialized = true;
 }
@@ -762,9 +788,10 @@ double ObstacleCostCalculator::computeCost(const Eigen::MatrixXd &trajectory, do
                                          + halfDims.z() * axes.col(2);
                 radius = std::max(radius, corner.norm());
             }
-            if (grid_i >= 0 && grid_i < _sdf.size() && !_sdf.empty() && grid_j >= 0
-                && grid_j < _sdf[0].size() && !_sdf[0].empty() && grid_k >= 0
-                && grid_k < _sdf[0][0].size()) {
+            // FIXED: Proper 3D array bounds checking to prevent segmentation faults
+            if (grid_i >= 0 && grid_i < _sdf.size() && !_sdf.empty() && 
+                grid_j >= 0 && grid_j < _sdf[grid_i].size() && !_sdf[grid_i].empty() &&
+                grid_k >= 0 && grid_k < _sdf[grid_i][grid_j].size()) {
                 double dist = _sdf[grid_i][grid_j][grid_k];
                 cost += std::max(radius - dist, 0.0) * ((center - centerOld) / dt).norm();
             }
@@ -859,19 +886,31 @@ Eigen::MatrixXd MotionGenerator::generateNoisyTrajectory(
     int numPoints = baseTrajectory.rows();
     int numJoints = baseTrajectory.cols();
     Eigen::MatrixXd noisyTrajectory = baseTrajectory;
-    Eigen::MatrixXd epsilon = Eigen::MatrixXd::Zero(numPoints, numJoints);
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    for (int d = 0; d < numJoints; d++) {
-        std::normal_distribution<> dist(0, stdDevs[d]);
-        epsilon.col(d) = _L * Eigen::VectorXd::NullaryExpr(numPoints, [&]() { return dist(gen); });
-    }
-    noisyTrajectory += epsilon;
-    for (int i = 0; i < numPoints; i++) {
+    
+    // CRITICAL FIX: Only generate noise for intermediate waypoints (exclude start and goal)
+    if (numPoints > 2) {
+        Eigen::MatrixXd epsilon = Eigen::MatrixXd::Zero(numPoints, numJoints);
+        std::random_device rd;
+        std::mt19937 gen(rd());
         for (int d = 0; d < numJoints; d++) {
-            noisyTrajectory(i, d) = std::clamp(noisyTrajectory(i, d),
-                                               std::get<0>(limits[d]),
-                                               std::get<1>(limits[d]));
+            std::normal_distribution<> dist(0, stdDevs[d]);
+            epsilon.col(d) = _L * Eigen::VectorXd::NullaryExpr(numPoints, [&]() { return dist(gen); });
+        }
+        
+        // FIXED: Safe block operations with proper dimension checking
+        int intermediatePoints = numPoints - 2;
+        if (intermediatePoints > 0 && intermediatePoints <= epsilon.rows() - 1) {
+            noisyTrajectory.block(1, 0, intermediatePoints, numJoints) += 
+                epsilon.block(1, 0, intermediatePoints, numJoints);
+        }
+        
+        // Clamp only the intermediate waypoints that received noise
+        for (int i = 1; i < numPoints - 1; i++) {
+            for (int d = 0; d < numJoints; d++) {
+                noisyTrajectory(i, d) = std::clamp(noisyTrajectory(i, d),
+                                                   std::get<0>(limits[d]),
+                                                   std::get<1>(limits[d]));
+            }
         }
     }
     return noisyTrajectory;

@@ -79,21 +79,21 @@ private:
  */
 struct StompConfig
 {
-    int numNoisyTrajectories = 6;         ///< Number of noisy trajectory samples per iteration (optimized)
-    int numBestSamples = 2;               ///< Number of best samples to use for updates (optimized)
+    int numNoisyTrajectories = 8;         ///< Number of noisy trajectory samples per iteration (optimized)
+    int numBestSamples = 6;               ///< Number of best samples to use for updates (optimized)
     int maxIterations = 250;              ///< Maximum optimization iterations (as requested)
-    int N = 75;                          ///< Number of trajectory points (optimized)
+    int N = 60;                          ///< Number of trajectory points (optimized)
     double dt = 0.1;                     ///< Time step for trajectory discretization
-    double learningRate = 0.2;  ///< Learning rate for trajectory updates (optimized)
-    double temperature = 29.19730655632339;    ///< Temperature parameter for sample weighting (optimized)
+    double learningRate = 0.5205343090882355;  ///< Learning rate for trajectory updates (optimized)
+    double temperature = 21.91837405134739;    ///< Temperature parameter for sample weighting (optimized)
     int numJoints = 7;                     ///< Number of robot joints
     double outputFrequency = 1000.0;         ///< Output frequency in Hz for quintic polynomial fitting
-    double obstacleCostWeight = 3.3922501719988896;   ///< Weight for obstacle cost in composite cost function (optimized)
-    double constraintCostWeight = 1.5127165513794805; ///< Weight for constraint cost in composite cost function (optimized)
+    double obstacleCostWeight = 2.2840139633539644;   ///< Weight for obstacle cost in composite cost function (optimized)
+    double constraintCostWeight = 1.1264194721037395; ///< Weight for constraint cost in composite cost function (optimized)
 
     Eigen::VectorXd jointStdDevs           ///< Standard deviations for noise per joint (optimized for each joint)
-        = (Eigen::VectorXd(7) << 0.0582353615703828, 0.14668808475499745, 0.05331246561043284, 
-           0.03724312604141198, 0.12453173853526511, 0.11152195769103804, 0.05073588645024437).finished();
+        = (Eigen::VectorXd(7) << 0.0611352765991869, 0.02090525430698372, 0.07965723143901145, 
+           0.0735809922744204, 0.042613461131609166, 0.04045309580681231, 0.08629620972690565).finished();
 
     bool enableEarlyStopping = false;      ///< Enable early stopping when collision-free trajectory found
     int earlyStoppingPatience = 1;         ///< Number of consecutive collision-free iterations before stopping

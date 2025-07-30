@@ -1,1 +1,0 @@
-academic_analysis/academic_analysis_report.md
