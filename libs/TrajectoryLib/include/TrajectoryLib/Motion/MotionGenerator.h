@@ -79,24 +79,25 @@ private:
  */
 struct StompConfig
 {
-    int numNoisyTrajectories = 20;         ///< Number of noisy trajectory samples per iteration (increased for better exploration)
-    int numBestSamples = 8;               ///< Number of best samples to use for updates (increased for stability)
+    int numNoisyTrajectories = 8;        ///< Number of noisy trajectory samples per iteration (optimized from trial 4)
+    int numBestSamples = 4 ;               ///< Number of best samples to use for updates (optimized from trial 4)
     int maxIterations = 500;              ///< Maximum optimization iterations (increased for guaranteed convergence)
-    int N = 80;                           ///< Number of trajectory points (reduced for faster computation)
-    double dt = 0.1;                     ///< Time step for trajectory discretization
-    double learningRate = 0.3;           ///< Learning rate for trajectory updates (reduced for stability)
-    double temperature = 8.0;            ///< Temperature parameter for sample weighting (increased for exploration)
-    int numJoints = 7;                     ///< Number of robot joints
-    double outputFrequency = 1000.0;         ///< Output frequency in Hz for quintic polynomial fitting
-    double obstacleCostWeight = 10.0;      ///< Weight for obstacle cost in composite cost function (increased penalty)
-    double constraintCostWeight = 3.0;    ///< Weight for constraint cost in composite cost function (balanced)
+    int N = 75;                          ///< Number of trajectory points (calculated dynamically based on dt and trajectory duration)
+    double dt = 0.1;                      ///< Fixed time step for trajectory discretization
+    double learningRate = 0.1;  ///< Learning rate for trajectory updates (optimized from trial 4)
+    double temperature = 10.;     ///< Temperature parameter for sample weighting (optimized from trial 4)
+    int numJoints = 7;                    ///< Number of robot joints
+    double outputFrequency = 1000.0;      ///< Output frequency in Hz for quintic polynomial fitting
+    double obstacleCostWeight = 1.;  ///< Weight for obstacle cost in composite cost function (optimized from trial 4)
+    double constraintCostWeight = 0.; ///< Weight for constraint cost in composite cost function (optimized from trial 4)
 
-    Eigen::VectorXd jointStdDevs           ///< Standard deviations for noise per joint (increased for better exploration)
-        = (Eigen::VectorXd(7) << 0.08, 0.12, 0.08, 0.15, 0.05, 0.08, 0.05).finished();
+    Eigen::VectorXd jointStdDevs          ///< Standard deviations for noise per joint (optimized from trial 4)
+        = (Eigen::VectorXd(7) << 0.11828390798973508, 0.12917601788977146, 0.04016129097742292, 
+           0.1312391777646125, 0.03847581028560518, 0.034287763762035676, 0.07234450150435813).finished();
 
     bool enableEarlyStopping = true;       ///< Enable early stopping when collision-free trajectory found
-    int earlyStoppingPatience = 3;         ///< Number of consecutive collision-free iterations before stopping
-    double maxComputeTimeMs = 0.0;     ///< Maximum computation time in milliseconds (10 seconds limit)
+    int earlyStoppingPatience = 10;         ///< Number of consecutive collision-free iterations before stopping
+    double maxComputeTimeMs = 0.0;     ///< Maximum computation time in milliseconds (15 seconds for hard cases)
     bool disableInternalParallelization = false; ///< Disable internal STOMP parallelization for batch mode optimization
 };
 

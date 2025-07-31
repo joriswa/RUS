@@ -1,13 +1,13 @@
 {
   "algorithm" : "STOMP",
-  "avg_clearance" : 0.039660960809923804,
-  "avg_constraint_violations" : 0.0043208071516848134,
-  "avg_path_length" : 1.9397032392124427,
-  "avg_planning_time_ms" : 1094.4602207,
-  "avg_smoothness" : 0.99913583856966304,
-  "collision_risk_score" : 0.5,
-  "composite_score" : 0.19433855270003811,
-  "success_rate" : 1.0,
-  "timestamp" : 1753949737,
-  "total_trajectories" : 10
+  "avg_clearance" : 0.050673967425892412,
+  "avg_constraint_violations" : 0.0058658063210970113,
+  "avg_path_length" : 2.3672277083640179,
+  "avg_planning_time_ms" : 11134.603526941177,
+  "avg_smoothness" : 0.9988268387357806,
+  "collision_risk_score" : 7.5000000000000009,
+  "composite_score" : 7.6948535453282316,
+  "success_rate" : 0.84999999999999998,
+  "timestamp" : 1753961818,
+  "total_trajectories" : 20
 }

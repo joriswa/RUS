@@ -585,7 +585,7 @@ std::vector<Trajectory> UltrasoundScanTrajectoryPlanner::planTrajectoryBatchHaus
                         // Configure PathPlanner to use RRT Connect for Hauser waypoints
                         Params rrtConnectParams;
                         rrtConnectParams.algo = RRTConnect;
-                        rrtConnectParams.stepSize = 0.2;
+                        rrtConnectParams.stepSize = 0.1;
                         rrtConnectParams.goalBiasProbability = 0.2;
                         rrtConnectParams.maxIterations = 10000;
 
