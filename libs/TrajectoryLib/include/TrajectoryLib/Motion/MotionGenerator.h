@@ -79,25 +79,24 @@ private:
  */
 struct StompConfig
 {
-    int numNoisyTrajectories = 8;         ///< Number of noisy trajectory samples per iteration (optimized)
-    int numBestSamples = 6;               ///< Number of best samples to use for updates (optimized)
-    int maxIterations = 250;              ///< Maximum optimization iterations (as requested)
-    int N = 60;                          ///< Number of trajectory points (optimized)
+    int numNoisyTrajectories = 20;         ///< Number of noisy trajectory samples per iteration (increased for better exploration)
+    int numBestSamples = 8;               ///< Number of best samples to use for updates (increased for stability)
+    int maxIterations = 500;              ///< Maximum optimization iterations (increased for guaranteed convergence)
+    int N = 80;                           ///< Number of trajectory points (reduced for faster computation)
     double dt = 0.1;                     ///< Time step for trajectory discretization
-    double learningRate = 0.5205343090882355;  ///< Learning rate for trajectory updates (optimized)
-    double temperature = 21.91837405134739;    ///< Temperature parameter for sample weighting (optimized)
+    double learningRate = 0.3;           ///< Learning rate for trajectory updates (reduced for stability)
+    double temperature = 8.0;            ///< Temperature parameter for sample weighting (increased for exploration)
     int numJoints = 7;                     ///< Number of robot joints
     double outputFrequency = 1000.0;         ///< Output frequency in Hz for quintic polynomial fitting
-    double obstacleCostWeight = 2.2840139633539644;   ///< Weight for obstacle cost in composite cost function (optimized)
-    double constraintCostWeight = 1.1264194721037395; ///< Weight for constraint cost in composite cost function (optimized)
+    double obstacleCostWeight = 10.0;      ///< Weight for obstacle cost in composite cost function (increased penalty)
+    double constraintCostWeight = 3.0;    ///< Weight for constraint cost in composite cost function (balanced)
 
-    Eigen::VectorXd jointStdDevs           ///< Standard deviations for noise per joint (optimized for each joint)
-        = (Eigen::VectorXd(7) << 0.0611352765991869, 0.02090525430698372, 0.07965723143901145, 
-           0.0735809922744204, 0.042613461131609166, 0.04045309580681231, 0.08629620972690565).finished();
+    Eigen::VectorXd jointStdDevs           ///< Standard deviations for noise per joint (increased for better exploration)
+        = (Eigen::VectorXd(7) << 0.08, 0.12, 0.08, 0.15, 0.05, 0.08, 0.05).finished();
 
-    bool enableEarlyStopping = false;      ///< Enable early stopping when collision-free trajectory found
-    int earlyStoppingPatience = 1;         ///< Number of consecutive collision-free iterations before stopping
-    double maxComputeTimeMs = 0.0;         ///< Maximum computation time in milliseconds (0 = no limit)
+    bool enableEarlyStopping = true;       ///< Enable early stopping when collision-free trajectory found
+    int earlyStoppingPatience = 3;         ///< Number of consecutive collision-free iterations before stopping
+    double maxComputeTimeMs = 0.0;     ///< Maximum computation time in milliseconds (10 seconds limit)
     bool disableInternalParallelization = false; ///< Disable internal STOMP parallelization for batch mode optimization
 };
 
@@ -121,10 +120,10 @@ public:
 };
 
 /**
- * @brief Cost calculator for obstacle avoidance using signed distance field
+ * @brief Cost calculator for obstacle avoidance using SDF with improved robot representation
  * 
- * Computes trajectory costs based on proximity to obstacles using a precomputed
- * signed distance field for efficient collision avoidance.
+ * Computes trajectory costs based on proximity to obstacles using signed distance field
+ * with multiple sample points on robot link bounding boxes for better accuracy.
  */
 class ObstacleCostCalculator : public CostCalculator
 {

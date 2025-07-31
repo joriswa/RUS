@@ -248,13 +248,9 @@ EvaluationResult evaluateSTOMPTrajectories(const StompParameters& params,
     result.algorithm = "STOMP";
     result.totalTrajectories = numTrajectoryPairs;
     
-    std::cout << "DEBUG: Starting STOMP evaluation..." << std::endl;
-    
     try {
         // Initialize robot arm and obstacles from config paths
-        std::cout << "Initializing robot arm with: " << urdfPath << std::endl;
         RobotArm* arm = new RobotArm(urdfPath);
-        std::cout << "Robot arm has 7 joints" << std::endl;
         
         // Initialize path planner for pose validation
         PathPlanner* pathPlanner = new PathPlanner();
@@ -269,7 +265,6 @@ EvaluationResult evaluateSTOMPTrajectories(const StompParameters& params,
         auto transformedObstacles = robotManager.getTransformedObstacles();
         std::shared_ptr<BVHTree> obstacleTree = std::make_shared<BVHTree>(transformedObstacles);
         
-        std::cout << "DEBUG: Created BVHTree with " << transformedObstacles.size() << " obstacles for realistic collision detection" << std::endl;
         // Set obstacle tree for path planner
         if (obstacleTree) {
             pathPlanner->setObstacleTree(obstacleTree);
@@ -303,7 +298,6 @@ EvaluationResult evaluateSTOMPTrajectories(const StompParameters& params,
         stompConfig.numNoisyTrajectories = params.numNoisyTrajectories;
         stompConfig.numBestSamples = params.numBestSamples;
         stompConfig.obstacleCostWeight = params.obstacleCostWeight;
-        stompConfig.constraintCostWeight = params.constraintCostWeight;
         
         // Set joint standard deviations from optimized parameters
         stompConfig.jointStdDevs = Eigen::VectorXd(7);
@@ -311,20 +305,8 @@ EvaluationResult evaluateSTOMPTrajectories(const StompParameters& params,
             stompConfig.jointStdDevs(i) = params.jointStdDevs[i];
         }
         
-        std::cout << "DEBUG: Loaded " << poses.size() << " poses" << std::endl;
-        std::cout << "DEBUG: Sample poses:" << std::endl;
-        for (int i = 0; i < std::min(3, (int)poses.size()); i++) {
-            const auto& pose = poses[i];
-            std::cout << "  Pose " << i << ": pos=(" << pose.position.x() << ", " << pose.position.y() 
-                      << ", " << pose.position.z() << "), quat=(" << pose.quaternion.w() 
-                      << ", " << pose.quaternion.x() << ", " << pose.quaternion.y() 
-                      << ", " << pose.quaternion.z() << ")" << std::endl;
-        }
-        
         // First pass: Check ALL poses and collect valid ones with their joint configurations
         std::vector<std::pair<int, RobotArm>> validPoses;
-        std::cout << "Phase 1: Checking all poses for reachability..." << std::endl;
-        std::cout << "Total poses to check: " << poses.size() << std::endl;
         
         int validCount = 0;
         int invalidCount = 0;
@@ -332,39 +314,19 @@ EvaluationResult evaluateSTOMPTrajectories(const StompParameters& params,
         for (int poseIdx = 0; poseIdx < poses.size(); poseIdx++) {
             const auto& pose = poses[poseIdx];
             
-            std::cout << "Checking pose " << (poseIdx + 1) << "/" << poses.size() 
-                      << " [" << std::fixed << std::setprecision(1) 
-                      << (100.0 * (poseIdx + 1) / poses.size()) << "%]..." << std::flush;
-            
             // Convert pose to Eigen::Affine3d for pose validation
             Eigen::Affine3d transform = Eigen::Affine3d::Identity();
             transform.translation() = pose.position;
             transform.linear() = pose.quaternion.toRotationMatrix();
             
-            // Time the pose validation
-            auto startTime = std::chrono::high_resolution_clock::now();
-            
             // Use selectGoalPoseSimulatedAnnealing to get valid joint configuration
             auto [robotArm, success] = pathPlanner->selectGoalPoseSimulatedAnnealing(transform);
-            
-            auto endTime = std::chrono::high_resolution_clock::now();
-            double validationTime = std::chrono::duration<double, std::milli>(endTime - startTime).count();
             
             if (success) {
                 validPoses.push_back({poseIdx, robotArm});
                 validCount++;
-                std::cout << " ✅ VALID (" << std::fixed << std::setprecision(0) << validationTime << "ms)" << std::endl;
             } else {
                 invalidCount++;
-                std::cout << " ❌ INVALID (" << std::fixed << std::setprecision(0) << validationTime << "ms)" << std::endl;
-            }
-            
-            // Progress summary every 10 poses
-            if ((poseIdx + 1) % 10 == 0) {
-                std::cout << "  === Progress Summary: " << (poseIdx + 1) << "/" << poses.size() 
-                          << " checked | Valid: " << validCount << " | Invalid: " << invalidCount 
-                          << " | Success Rate: " << std::fixed << std::setprecision(1) 
-                          << (100.0 * validCount / (poseIdx + 1)) << "% ===" << std::endl;
             }
         }
         
@@ -373,7 +335,7 @@ EvaluationResult evaluateSTOMPTrajectories(const StompParameters& params,
         
         if (validPoses.size() < 2) {
             std::cout << "ERROR: Need at least 2 valid poses for trajectory evaluation, found " << validPoses.size() << std::endl;
-            result.compositeScore = 10.0;  // High penalty for insufficient poses
+            result.compositeScore = 100.0;  // Massive penalty for insufficient poses to run STOMP
             return result;
         }
         
@@ -533,16 +495,16 @@ EvaluationResult evaluateSTOMPTrajectories(const StompParameters& params,
             }
             
             // Composite objective (lower is better) - only meaningful if we had valid poses to evaluate  
-            double timeScore = (successCount > 0) ? result.avgPlanningTime / 1000.0 : 1.0;  // Normalize to ~0.1-1.0
-            double successScore = (1.0 - result.successRate) * 2.0;  // Penalty for failures
-            double clearanceScore = (successCount > 0) ? std::max(0.0, (0.1 - result.avgClearance) * 10.0) : 1.0;  // Penalty for low clearance (target: >0.1m)
+            double timeScore = (successCount > 0) ? result.avgPlanningTime / 1000.0 : 5.0;  // Normalize to ~0.1-1.0, high penalty if no success
+            double successScore = (1.0 - result.successRate) * 50.0;  // EXTREMELY HEAVY penalty for STOMP trajectory failures (50x multiplier)
+            double clearanceScore = (successCount > 0) ? std::max(0.0, (0.1 - result.avgClearance) * 10.0) : 2.0;  // Penalty for low clearance (target: >0.1m)
             
-            // Simplified composite score - disregard path length and smoothness
-            // Focus on: planning time (40%), success rate (40%), clearance (20%)
-            result.compositeScore = 0.4 * timeScore + 0.4 * successScore + 0.2 * clearanceScore;
+            // Heavily weighted composite score to prioritize STOMP trajectory success above all else
+            // Focus on: STOMP success rate (80%), planning time (15%), clearance (5%)
+            result.compositeScore = 0.15 * timeScore + 0.8 * successScore + 0.05 * clearanceScore;
         } else {
-            // No valid pose pairs found - high penalty
-            result.compositeScore = 10.0;  // High penalty for no valid poses
+            // No valid pose pairs found - extremely high penalty for complete STOMP failure
+            result.compositeScore = 100.0;  // Massive penalty for no valid STOMP trajectories
             result.successRate = 0.0;
             result.totalTrajectories = 0;
             std::cout << "WARNING: No valid pose pairs found for evaluation!" << std::endl;
@@ -551,7 +513,7 @@ EvaluationResult evaluateSTOMPTrajectories(const StompParameters& params,
     } catch (const std::exception& e) {
         std::cerr << "Error in STOMP evaluation: " << e.what() << std::endl;
         std::cerr << "DEBUG: Full exception details: " << typeid(e).name() << std::endl;
-        result.compositeScore = 10.0;
+        result.compositeScore = 200.0;  // EXTREME penalty for STOMP exceptions/crashes
     }
     
     return result;
@@ -571,9 +533,9 @@ void saveResultsToJSON(const EvaluationResult& result, const std::string& filena
     jsonResult["composite_score"] = result.compositeScore;
     jsonResult["total_trajectories"] = result.totalTrajectories;
     
-    // Multi-objective optimization metrics
-    jsonResult["avg_constraint_violations"] = (1.0 - result.avgSmoothness) * 2.0;  // Constraint violation score
-    jsonResult["collision_risk_score"] = std::max(0.1, (1.0 - result.successRate) * 5.0);  // Collision risk based on failures
+    // Multi-objective optimization metrics with HEAVY STOMP failure penalties
+    jsonResult["avg_constraint_violations"] = (1.0 - result.avgSmoothness) * 5.0;  // Increased constraint violation penalty
+    jsonResult["collision_risk_score"] = std::max(0.5, (1.0 - result.successRate) * 50.0);  // EXTREME penalty for STOMP trajectory failures
     
     jsonResult["timestamp"] = std::chrono::duration_cast<std::chrono::seconds>(
         std::chrono::system_clock::now().time_since_epoch()).count();

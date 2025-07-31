@@ -1,0 +1,28 @@
+# Optimized STOMP parameters with heavy failure penalties
+# Best trial: 2
+# Best composite score: 0.200000
+# Total evaluations: 200
+
+csv_file: /Users/joris/Uni/MA/Code/PathPlanner_US_wip/apps/ParameterTuning/Data/Ext_Ant_Scan/scan_pose_list_ee.csv
+evaluation:
+  trajectory_pairs: 10
+obstacles_file: /Users/joris/Uni/MA/Code/PathPlanner_US_wip/apps/ParameterTuning/Data/Ext_Ant_Scan/obstacles.xml
+output_file: trial_results.json
+stomp:
+  N: 50
+  constraint_cost_weight: 5.617658472794158
+  joint_std_devs:
+  - 0.02626994059100413
+  - 0.10358512791602267
+  - 0.04784724999534931
+  - 0.10922872058880165
+  - 0.013548963927444006
+  - 0.03381115893334108
+  - 0.01473476002556769
+  learning_rate: 0.7322921659290826
+  max_iterations: 50
+  num_best_samples: 3
+  num_noisy_trajectories: 10
+  obstacle_cost_weight: 2.919893141201317
+  temperature: 3.3110741748129566
+urdf_file: /Users/joris/Uni/MA/robot_definition/panda_US.urdf

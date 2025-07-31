@@ -6,6 +6,8 @@
 #define GEOMETRYLIB_DISABLE_LOGGING
 // To enable logging for debugging, comment out the line above
 //
+// FORCED DISABLE: All GeometryLib logging is now permanently disabled for performance
+//
 // This disables all LOG_ macros related to:
 // - BVH tree operations and queries
 // - Collision detection and intersection tests  

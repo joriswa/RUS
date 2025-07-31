@@ -138,8 +138,8 @@ std::vector<MotionGenerator::TrajectoryPoint> MotionGenerator::computeTimeOptima
     for (size_t k = 0; k < _numJoints; ++k) {
         double diff = std::abs(end.position[k] - start.position[k]);
         if (diff > 0) {
-            v_max = std::min(v_max, _maxJointVelocities[k] * 0.5);
-            a_max = std::min(a_max, _maxJointAccelerations[k] * 0.5);
+            v_max = std::min(v_max, _maxJointVelocities[k]);
+            a_max = std::min(a_max, _maxJointAccelerations[k]);
         }
     }
     double total_distance = 0;
@@ -251,9 +251,9 @@ void MotionGenerator::createSDF()
     if (_sdfInitialized) {
         return;
     }
-    Eigen::Vector3d minPoint(-1., -1., -0.1);
-    Eigen::Vector3d maxPoint(1., 1., 1.5);
-    double resolution = 0.1;
+    Eigen::Vector3d minPoint(-1.4, -1.4, -0.4);
+    Eigen::Vector3d maxPoint(1.4, 1.4, 1.4);
+    double resolution = 0.01;
     _sdfMinPoint = minPoint;
     _sdfMaxPoint = maxPoint;
     _sdfResolution = resolution;
@@ -291,7 +291,7 @@ bool MotionGenerator::performSTOMP(const StompConfig &config,
         
         // Explicit collision and constraint checking
         bool collisionFree = !checkCollisions(theta, N);
-        bool constraintsValid = isTrajectoryValidWithMargin(theta, dt, 1.2, 1.2);
+        bool constraintsValid = isTrajectoryValidWithMargin(theta, dt, 1., 1.);
         bool trajectoryValid = collisionFree && constraintsValid;
         
         updateConvergenceState(convergenceState, theta, config, iteration, dt, trajectoryValid);
@@ -328,8 +328,22 @@ MotionGenerator::STOMPInitData MotionGenerator::initializeSTOMPExecution(
         start.acceleration.push_back(0.0);
         end.acceleration.push_back(0.0);
     }
+    
+    std::vector<double> originalMaxVel = _maxJointVelocities;
+    std::vector<double> originalMaxAcc = _maxJointAccelerations;
+    const double conservativeFactor = 0.4;
+
+    for (size_t i = 0; i < _maxJointVelocities.size(); ++i) {
+        _maxJointVelocities[i] *= conservativeFactor;
+        _maxJointAccelerations[i] *= conservativeFactor;
+    }
+
     auto segment = computeTimeOptimalSegment(start, end, 0.0);
-    double estimatedTime = segment.back().time * 1.5; // give the optimizer time to breathe
+    double estimatedTime = segment.back().time;
+    
+    _maxJointVelocities = originalMaxVel;
+    _maxJointAccelerations = originalMaxAcc;
+    
     initData.N = config.N; // Use N from config instead of calculating dynamically
     initData.dt = estimatedTime / (initData.N - 1); // Calculate dt based on trajectory time and N
     initData.theta = initializeTrajectory(goalVec, startVec, initData.N, config.numJoints);
@@ -787,6 +801,44 @@ ObstacleCostCalculator::ObstacleCostCalculator(
     , _sdfMaxPoint(sdfMaxPoint)
     , _sdfResolution(sdfResolution)
 {}
+// Helper function to sample points on oriented bounding box surface
+std::vector<Eigen::Vector3d> sampleBoundingBoxPoints(const Eigen::Vector3d &center,
+                                                      const Eigen::Vector3d &halfDims,
+                                                      const Eigen::Matrix3d &axes)
+{
+    std::vector<Eigen::Vector3d> points;
+    
+    // Sample 8 vertices of the bounding box
+    for (int i = 0; i < 2; ++i) {
+        for (int j = 0; j < 2; ++j) {
+            for (int k = 0; k < 2; ++k) {
+                Eigen::Vector3d localPoint(
+                    (i == 0 ? -halfDims.x() : halfDims.x()),
+                    (j == 0 ? -halfDims.y() : halfDims.y()),
+                    (k == 0 ? -halfDims.z() : halfDims.z())
+                );
+                Eigen::Vector3d worldPoint = center + axes * localPoint;
+                points.push_back(worldPoint);
+            }
+        }
+    }
+    
+    // Sample face centers
+    for (int axis = 0; axis < 3; ++axis) {
+        for (int dir = 0; dir < 2; ++dir) {
+            Eigen::Vector3d localPoint = Eigen::Vector3d::Zero();
+            localPoint[axis] = (dir == 0 ? -halfDims[axis] : halfDims[axis]);
+            Eigen::Vector3d worldPoint = center + axes * localPoint;
+            points.push_back(worldPoint);
+        }
+    }
+    
+    // Add center point
+    points.push_back(center);
+    
+    return points;
+}
+
 double ObstacleCostCalculator::computeCost(const Eigen::MatrixXd &trajectory, double dt)
 {
     double cost = 0;
@@ -794,34 +846,64 @@ double ObstacleCostCalculator::computeCost(const Eigen::MatrixXd &trajectory, do
     RobotArm currentArm = _arm;
     currentArm.setJointAngles(trajectory.row(0));
     RobotArm prevArm = currentArm;
-    bool collides = false;
+    
     for (int i = 0; i < N; ++i) {
         RobotArm curArm = _arm;
         curArm.setJointAngles(trajectory.row(i));
         auto bboxesNew = curArm.getLinkBoundingBoxes();
         auto bboxesOld = prevArm.getLinkBoundingBoxes();
+        
+        double minDistance = std::numeric_limits<double>::max();
+        bool foundValidDistance = false;
+        
         for (int iter = 0; iter < bboxesNew.size(); ++iter) {
             auto [center, halfDims, axes] = bboxesNew[iter];
             auto [centerOld, halfDimsOld, axesOld] = bboxesOld[iter];
-            Eigen::Vector3d gridCoords = (center - _sdfMinPoint) / _sdfResolution;
-            int grid_i = static_cast<int>(gridCoords.x());
-            int grid_j = static_cast<int>(gridCoords.y());
-            int grid_k = static_cast<int>(gridCoords.z());
-            double radius = 0;
-            for (int axis_idx = 0; axis_idx < 3; ++axis_idx) {
-                Eigen::Vector3d corner = halfDims.x() * axes.col(0) + halfDims.y() * axes.col(1)
-                                         + halfDims.z() * axes.col(2);
-                radius = std::max(radius, corner.norm());
-            }
-            // FIXED: Proper 3D array bounds checking to prevent segmentation faults
-            if (grid_i >= 0 && grid_i < _sdf.size() && !_sdf.empty() && 
-                grid_j >= 0 && grid_j < _sdf[grid_i].size() && !_sdf[grid_i].empty() &&
-                grid_k >= 0 && grid_k < _sdf[grid_i][grid_j].size()) {
-                double dist = _sdf[grid_i][grid_j][grid_k];
-                cost += std::max(radius - dist, 0.0) * ((center - centerOld) / dt).norm();
+            
+            // Sample multiple points on the bounding box surface
+            auto samplePoints = sampleBoundingBoxPoints(center, halfDims, axes);
+            
+            for (const auto &point : samplePoints) {
+                // Use SDF for distance lookup instead of BVH tree query
+                Eigen::Vector3d gridCoords = (point - _sdfMinPoint) / _sdfResolution;
+                int grid_i = static_cast<int>(gridCoords.x());
+                int grid_j = static_cast<int>(gridCoords.y());
+                int grid_k = static_cast<int>(gridCoords.z());
+                
+                double distance = 0.0;
+                // FIXED: Proper 3D array bounds checking to prevent segmentation faults
+                if (grid_i >= 0 && grid_i < _sdf.size() && !_sdf.empty() && 
+                    grid_j >= 0 && grid_j < _sdf[grid_i].size() && !_sdf[grid_i].empty() &&
+                    grid_k >= 0 && grid_k < _sdf[grid_i][grid_j].size()) {
+                    distance = _sdf[grid_i][grid_j][grid_k];
+                    
+                } else {
+                    qDebug() << "SDF not accessible - Point:" << point.x() << point.y() << point.z() 
+                             << "Grid coords:" << grid_i << grid_j << grid_k 
+                             << "SDF size:" << _sdf.size() 
+                             << "SDF bounds: min(" << _sdfMinPoint.x() << _sdfMinPoint.y() << _sdfMinPoint.z() 
+                             << ") max(" << _sdfMaxPoint.x() << _sdfMaxPoint.y() << _sdfMaxPoint.z() 
+                             << ") resolution:" << _sdfResolution;
+                    distance = 0.1; // 10cm clearance
+                }
+
+                foundValidDistance = true;
+                minDistance = std::min(minDistance, distance);
+                
+                // Calculate velocity magnitude for this point
+                Eigen::Vector3d pointOld = centerOld + axesOld * (axes.transpose() * (point - center));
+                double velocity = ((point - pointOld) / dt).norm();
+
+                double clearance = 0.05;
+                double obstacleCost = std::max(0.0, clearance - distance);
+
+                // Scale cost by velocity as in original STOMP paper
+                cost += obstacleCost * velocity;
             }
         }
-        if (!collides) {
+        
+        // Fallback collision check if no valid distances found
+        if (!foundValidDistance) {
             auto bBoxes = curArm.getCollisionBoxes();
             int link = 0;
             for (const auto &bBox : bBoxes) {
@@ -830,16 +912,15 @@ double ObstacleCostCalculator::computeCost(const Eigen::MatrixXd &trajectory, do
                     continue;
                 auto [center, halfDims, axes] = bBox;
                 if (_obstacleTree->isBoxIntersecting(center, halfDims, axes)) {
-                    collides = true;
+                    cost += 1000.0; // High penalty for collision
                     break;
                 }
             }
         }
-        if (collides) {
-            cost += 1.;
-        }
+
         prevArm = curArm;
     }
+
     return cost;
 }
 ConstraintCostCalculator::ConstraintCostCalculator(const std::vector<double> &maxVel,

@@ -1,6 +1,10 @@
 cmake_minimum_required(VERSION 3.5)
 project(PathPlanner VERSION 0.1 LANGUAGES CXX)
 
+# Force Release build for maximum performance
+set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
+set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG -march=native -flto" CACHE STRING "Release flags" FORCE)
+
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)

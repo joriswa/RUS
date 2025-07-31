@@ -1,4 +1,4 @@
-#include "USLib/USTrajectoryPlanner.h"
+#include "USTrajectoryPlanner.h"
 #include <QDebug>
 #include "TrajectoryLib/Logger.h"
 #include "TrajectoryLib/Planning/PathPlanner.h"

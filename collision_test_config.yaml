@@ -1,0 +1,24 @@
+# Force collision test config - very low obstacle cost to encourage collisions
+csv_file: /Users/joris/Uni/MA/Code/PathPlanner_US_wip/apps/ParameterTuning/Data/Ext_Ant_Scan/scan_pose_list_ee.csv
+evaluation:
+  trajectory_pairs: 1
+obstacles_file: /Users/joris/Uni/MA/Code/PathPlanner_US_wip/apps/ParameterTuning/Data/Ext_Ant_Scan/obstacles.xml
+output_file: collision_test_results.json
+stomp:
+  N: 50
+  constraint_cost_weight: 1.0
+  joint_std_devs:
+  - 0.15
+  - 0.15  
+  - 0.15
+  - 0.15
+  - 0.15
+  - 0.15
+  - 0.15
+  learning_rate: 0.9
+  max_iterations: 10  # Fewer iterations to see intermediate collisions
+  num_best_samples: 8
+  num_noisy_trajectories: 11
+  obstacle_cost_weight: 0.01  # Very low obstacle cost to force collisions
+  temperature: 5
+urdf_file: /Users/joris/Uni/MA/robot_definition/panda_US.urdf
