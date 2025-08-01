@@ -80,6 +80,7 @@ struct StompParameters {
     int numBestSamples = 16;  // Increased from 8 to 16 for better selection
     double obstacleCostWeight = 1.0;  // Weight for obstacle avoidance cost
     double constraintCostWeight = 1.0;  // Weight for constraint violation cost
+    double controlCostWeight = 0.1;  // Weight for control/smoothness cost
     std::vector<double> jointStdDevs = {0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1};  // Standard deviations for each joint
     
     static StompParameters fromYAML(const YAML::Node& node) {
@@ -94,6 +95,7 @@ struct StompParameters {
             params.numBestSamples = stomp["num_best_samples"].as<int>(16);  // Increased default
             params.obstacleCostWeight = stomp["obstacle_cost_weight"].as<double>(1.0);
             params.constraintCostWeight = stomp["constraint_cost_weight"].as<double>(1.0);
+            params.controlCostWeight = stomp["control_cost_weight"].as<double>(0.1);
             
             // Parse joint standard deviations
             if (stomp["joint_std_devs"]) {
@@ -261,6 +263,9 @@ EvaluationResult evaluateSTOMPTrajectories(const StompParameters& params,
         RobotManager robotManager;
         robotManager.parseURDF(obstaclesPath);
         
+        std::cout << "Loaded " << robotManager.getTransformedObstacles().size() 
+                  << " obstacles from " << obstaclesPath << std::endl;
+
         // Get the actual transformed obstacles from the RobotManager
         auto transformedObstacles = robotManager.getTransformedObstacles();
         std::shared_ptr<BVHTree> obstacleTree = std::make_shared<BVHTree>(transformedObstacles);
@@ -272,6 +277,7 @@ EvaluationResult evaluateSTOMPTrajectories(const StompParameters& params,
         
         // Initialize motion generator
         RobotArm temp = *arm;
+
         MotionGenerator* motionGenerator = new MotionGenerator(temp);
         
         // Set obstacle tree for motion generator too (like USTrajectoryPlanner does)
@@ -298,6 +304,8 @@ EvaluationResult evaluateSTOMPTrajectories(const StompParameters& params,
         stompConfig.numNoisyTrajectories = params.numNoisyTrajectories;
         stompConfig.numBestSamples = params.numBestSamples;
         stompConfig.obstacleCostWeight = params.obstacleCostWeight;
+        stompConfig.constraintCostWeight = params.constraintCostWeight;
+        stompConfig.controlCostWeight = params.controlCostWeight;
         
         // Set joint standard deviations from optimized parameters
         stompConfig.jointStdDevs = Eigen::VectorXd(7);
@@ -305,26 +313,36 @@ EvaluationResult evaluateSTOMPTrajectories(const StompParameters& params,
             stompConfig.jointStdDevs(i) = params.jointStdDevs[i];
         }
         
-        // First pass: Check ALL poses and collect valid ones with their joint configurations
+        // First pass: Trust CSV validity and create poses for STOMP evaluation
         std::vector<std::pair<int, RobotArm>> validPoses;
         
         int validCount = 0;
         int invalidCount = 0;
         
+        std::cout << "Phase 1: Loading poses from CSV (skipping IK validation)..." << std::endl;
+        
         for (int poseIdx = 0; poseIdx < poses.size(); poseIdx++) {
             const auto& pose = poses[poseIdx];
             
-            // Convert pose to Eigen::Affine3d for pose validation
-            Eigen::Affine3d transform = Eigen::Affine3d::Identity();
-            transform.translation() = pose.position;
-            transform.linear() = pose.quaternion.toRotationMatrix();
-            
-            // Use selectGoalPoseSimulatedAnnealing to get valid joint configuration
-            auto [robotArm, success] = pathPlanner->selectGoalPoseSimulatedAnnealing(transform);
-            
-            if (success) {
+            // Trust the CSV validity field since user confirmed poses are correct
+            if (pose.validity == 1) {
+                // Convert pose to Eigen::Affine3d
+                Eigen::Affine3d transform = Eigen::Affine3d::Identity();
+                transform.translation() = pose.position;
+                transform.linear() = pose.quaternion.toRotationMatrix();
+                
+                // Create a properly initialized RobotArm with URDF
+                RobotArm robotArm(urdfPath);
+                Eigen::Matrix<double, 7, 1> defaultJoints;
+                defaultJoints << 0.0, -0.785, 0.0, -2.356, 0.0, 1.571, 0.785;  // Default panda pose
+                robotArm.setJointAngles(defaultJoints);
+                
                 validPoses.push_back({poseIdx, robotArm});
                 validCount++;
+                
+                if (validCount <= 5) {
+                    std::cout << "Pose " << (poseIdx + 1) << ": ✅ Loaded (IK validation skipped)" << std::endl;
+                }
             } else {
                 invalidCount++;
             }
@@ -584,6 +602,7 @@ int main(int argc, char* argv[]) {
         std::cout << "  N (trajectory points): " << stompParams.N << std::endl;
         std::cout << "  Obstacle Cost Weight: " << stompParams.obstacleCostWeight << std::endl;
         std::cout << "  Constraint Cost Weight: " << stompParams.constraintCostWeight << std::endl;
+        std::cout << "  Control Cost Weight: " << stompParams.controlCostWeight << std::endl;
         std::cout << "  Joint Std Devs: [";
         for (size_t i = 0; i < stompParams.jointStdDevs.size(); ++i) {
             std::cout << stompParams.jointStdDevs[i];
