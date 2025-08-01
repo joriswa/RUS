@@ -1,0 +1,26 @@
+# Maximum Success Rate STOMP Configuration
+# Sacrifice trajectory quality for maximum success rate
+
+csv_file: /Users/joris/Uni/MA/Code/PathPlanner_US_wip/apps/ParameterTuning/Data/Ext_Ant_Scan/scan_pose_list_ee.csv
+evaluation:
+  trajectory_pairs: 50
+obstacles_file: /Users/joris/Uni/MA/Code/PathPlanner_US_wip/apps/ParameterTuning/Data/Ext_Ant_Scan/obstacles.xml
+output_file: max_success_results.json
+stomp:
+  N: 35                                  # Even fewer points
+  constraint_cost_weight: 0.05           # Almost ignore constraints
+  joint_std_devs:
+  - 0.14969074521794967                  # Keep optimized noise values
+  - 0.013265385613107944
+  - 0.045064390929169765
+  - 0.10387464719708213
+  - 0.064733344435142
+  - 0.13144377546895014
+  - 0.11379621126089833
+  learning_rate: 0.6                     # Even lower learning rate
+  max_iterations: 150                    # Fewer iterations but more samples
+  num_best_samples: 12                   # Keep even more good samples
+  num_noisy_trajectories: 20             # Maximum exploration
+  obstacle_cost_weight: 12.0             # Very high collision avoidance weight
+  temperature: 15.0                      # Maximum exploration temperature
+urdf_file: /Users/joris/Uni/MA/robot_definition/panda_US.urdf

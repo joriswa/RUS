@@ -1,0 +1,26 @@
+# Optimal STOMP parameters found by Optuna soft constraint optimization
+# Trial 0 - Deviation Score: 9600.0000
+# Target: Success Rate ~= 0.95, Planning Time ~= 1000ms
+csv_file: "/Users/joris/Uni/MA/Code/PathPlanner_US_wip/apps/ParameterTuning/Data/Ext_Ant_Scan/scan_pose_list_ee.csv"
+obstacles_file: "/Users/joris/Uni/MA/Code/PathPlanner_US_wip/apps/ParameterTuning/Data/Ext_Ant_Scan/obstacles.xml"
+urdf_file: "/Users/joris/Uni/MA/Code/PathPlanner_US_wip/res/scenario_1/panda_US.urdf"
+output_file: "optimal_results.json"
+
+stomp:
+  temperature: 11.400735978045372
+  learning_rate: 0.4906542834226578
+  max_iterations: 100
+  N: 55
+  num_noisy_trajectories: 36
+  num_best_samples: 6
+  obstacle_cost_weight: 4.056118762968007
+  constraint_cost_weight: 4.222681133615387
+  joint_std_devs: [0.024983669970941227, 0.05176234986395637, 0.11812104500715151, 0.09843043189263277, 0.08277939938455345, 0.057732758349771526, 0.03649653811567964]
+
+evaluation:
+  trajectory_pairs: 20  # Use more pairs for final validation
+
+# Performance metrics:
+# Success Rate: 0.0
+# Avg Planning Time: 0.0ms
+# Deviation Score: 9600.0000 (lower = closer to targets)

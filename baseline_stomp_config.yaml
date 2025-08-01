@@ -1,0 +1,26 @@
+# Baseline STOMP parameters (before optimization)
+# Based on previous good parameters that achieved 6.4 score
+
+csv_file: /Users/joris/Uni/MA/Code/PathPlanner_US_wip/apps/ParameterTuning/Data/Ext_Ant_Scan/scan_pose_list_ee.csv
+evaluation:
+  trajectory_pairs: 50
+obstacles_file: /Users/joris/Uni/MA/Code/PathPlanner_US_wip/apps/ParameterTuning/Data/Ext_Ant_Scan/obstacles.xml
+output_file: baseline_results.json
+stomp:
+  N: 50
+  constraint_cost_weight: 5.0
+  joint_std_devs:
+  - 0.08
+  - 0.08
+  - 0.08
+  - 0.08
+  - 0.08
+  - 0.08
+  - 0.08
+  learning_rate: 0.5
+  max_iterations: 50
+  num_best_samples: 4
+  num_noisy_trajectories: 8
+  obstacle_cost_weight: 2.0
+  temperature: 10.0
+urdf_file: /Users/joris/Uni/MA/robot_definition/panda_US.urdf

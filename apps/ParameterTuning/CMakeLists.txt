@@ -34,3 +34,22 @@ target_compile_options(parameter_evaluator PRIVATE
     ${YAMLCPP_CFLAGS_OTHER}
     ${JSONCPP_CFLAGS_OTHER}
 )
+
+# Add the hard case analyzer executable
+add_executable(hard_case_analyzer hard_case_analyzer.cpp)
+
+# Link libraries for hard case analyzer
+target_link_libraries(hard_case_analyzer PRIVATE
+    USLib
+    /opt/homebrew/opt/yaml-cpp/lib/libyaml-cpp.dylib
+)
+
+# Include yaml-cpp for hard case analyzer
+target_include_directories(hard_case_analyzer PRIVATE 
+    ${YAMLCPP_INCLUDE_DIRS}
+)
+
+# Compiler flags for hard case analyzer
+target_compile_options(hard_case_analyzer PRIVATE
+    ${YAMLCPP_CFLAGS_OTHER}
+)

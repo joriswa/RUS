@@ -12,3 +12,6 @@ add_subdirectory(PythonAnalysis)
 
 # Add Trajectory Planning Evaluator app
 add_subdirectory(TrajectoryPlanningEvaluator)
+
+# Add STOMP Debugger app
+add_subdirectory(StompDebugger)

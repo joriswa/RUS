@@ -10,7 +10,7 @@
 
 // Compile-time configuration
 #ifndef TRAJECTORY_LOGGING_ENABLED
-#define TRAJECTORY_LOGGING_ENABLED 1  // Enable by default
+#define TRAJECTORY_LOGGING_ENABLED 0  // Disabled for production performance
 #endif
 
 #ifndef TRAJECTORY_LOGGING_TIMESTAMPS

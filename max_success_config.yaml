@@ -1,0 +1,25 @@
+# STOMP Max Success Rate Config (Quality sacrificed for success)
+numNoisyTrajectories: 20
+numBestSamples: 12
+maxIterations: 150
+N: 35
+learningRate: 0.6
+temperature: 15.0
+
+# Extreme success rate optimization
+obstacleCostWeight: 12.0
+smoothnessCostWeight: 0.1
+velocityCostWeight: 0.05
+accelerationCostWeight: 0.05
+goalCostWeight: 8.0
+collisionPenaltyWeight: 120.0
+prioritizeSuccessRate: true
+constraintRelaxationFactor: 2.5
+
+# Aggressive early stopping
+enableEarlyStopping: true
+earlyStoppingPatience: 1
+maxComputeTimeMs: 3000.0
+
+# Optimized joint noise
+jointStdDevs: [0.149691, 0.0132654, 0.0450644, 0.103875, 0.0647333, 0.131444, 0.113796]

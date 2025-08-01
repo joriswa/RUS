@@ -1,0 +1,401 @@
+Loaded 127 valid poses from /Users/joris/Uni/MA/Code/PathPlanner_US_wip/apps/ParameterTuning/Data/Ext_Ant_Scan/scan_pose_list_ee.csv
+\n=== PARAMETER EVALUATION ===
+Parameters:
+  Temperature: 10.4551
+  Learning Rate: 0.950018
+  Max Iterations: 50
+  N (trajectory points): 50
+  Obstacle Cost Weight: 2.95032
+  Constraint Cost Weight: 1.61721
+  Joint Std Devs: [0.149691, 0.0132654, 0.0450644, 0.103875, 0.0647333, 0.131444, 0.113796]
+DEBUG: About to call evaluateSTOMPTrajectories with 50 pairs
+DEBUG: Starting STOMP evaluation...
+Initializing robot arm with: /Users/joris/Uni/MA/robot_definition/panda_US.urdf
+Robot arm has 7 joints
+DEBUG setStartPose: incoming arm joint count = 7
+DEBUG setStartPose: _startArm joints = [0 0 0 0 0 0 0]
+Loading obstacles from: /Users/joris/Uni/MA/Code/PathPlanner_US_wip/apps/ParameterTuning/Data/Ext_Ant_Scan/obstacles.xml
+DEBUG: Created BVHTree with 186 obstacles for realistic collision detection
+DEBUG setStartPose: incoming arm joint count = 7
+DEBUG setStartPose: _startArm joints = [     0 -0.785      0 -2.356      0  1.571  0.785]
+DEBUG: Loaded 127 poses
+DEBUG: Sample poses:
+  Pose 0: pos=(0.479865, -0.320191, 0.35223), quat=(0.517385, 0.185462, -0.136992, -0.824106)
+  Pose 1: pos=(0.479865, -0.320191, 0.35223), quat=(0.473129, 0.227125, -0.318474, -0.789391)
+  Pose 2: pos=(0.46601, -0.33345, 0.354465), quat=(0.530241, -0.0826651, -0.426342, -0.728178)
+Phase 1: Checking all poses for reachability...
+Total poses to check: 127
+Checking pose 1/127 [0.8%]... ✅ VALID (30ms)
+Checking pose 2/127 [1.6%]... ❌ INVALID (22ms)
+Checking pose 3/127 [2.4%]... ❌ INVALID (16ms)
+Checking pose 4/127 [3.1%]... ❌ INVALID (14ms)
+Checking pose 5/127 [3.9%]... ❌ INVALID (16ms)
+Checking pose 6/127 [4.7%]... ❌ INVALID (23ms)
+Checking pose 7/127 [5.5%]... ❌ INVALID (24ms)
+Checking pose 8/127 [6.3%]... ❌ INVALID (15ms)
+Checking pose 9/127 [7.1%]... ❌ INVALID (15ms)
+Checking pose 10/127 [7.9%]... ✅ VALID (22ms)
+  === Progress Summary: 10/127 checked | Valid: 2 | Invalid: 8 | Success Rate: 20.0% ===
+Checking pose 11/127 [8.7%]... ✅ VALID (20ms)
+Checking pose 12/127 [9.4%]... ❌ INVALID (20ms)
+Checking pose 13/127 [10.2%]... ✅ VALID (24ms)
+Checking pose 14/127 [11.0%]... ✅ VALID (22ms)
+Checking pose 15/127 [11.8%]... ✅ VALID (28ms)
+Checking pose 16/127 [12.6%]... ✅ VALID (15ms)
+Checking pose 17/127 [13.4%]... ✅ VALID (17ms)
+Checking pose 18/127 [14.2%]... ✅ VALID (15ms)
+Checking pose 19/127 [15.0%]... ✅ VALID (14ms)
+Checking pose 20/127 [15.7%]... ✅ VALID (15ms)
+  === Progress Summary: 20/127 checked | Valid: 11 | Invalid: 9 | Success Rate: 55.0% ===
+Checking pose 21/127 [16.5%]... ❌ INVALID (18ms)
+Checking pose 22/127 [17.3%]... ✅ VALID (17ms)
+Checking pose 23/127 [18.1%]... ✅ VALID (19ms)
+Checking pose 24/127 [18.9%]... ❌ INVALID (18ms)
+Checking pose 25/127 [19.7%]... ✅ VALID (25ms)
+Checking pose 26/127 [20.5%]... ✅ VALID (30ms)
+Checking pose 27/127 [21.3%]... ✅ VALID (32ms)
+Checking pose 28/127 [22.0%]... ✅ VALID (31ms)
+Checking pose 29/127 [22.8%]... ✅ VALID (29ms)
+Checking pose 30/127 [23.6%]... ✅ VALID (27ms)
+  === Progress Summary: 30/127 checked | Valid: 19 | Invalid: 11 | Success Rate: 63.3% ===
+Checking pose 31/127 [24.4%]... ✅ VALID (26ms)
+Checking pose 32/127 [25.2%]... ✅ VALID (29ms)
+Checking pose 33/127 [26.0%]... ✅ VALID (27ms)
+Checking pose 34/127 [26.8%]... ✅ VALID (28ms)
+Checking pose 35/127 [27.6%]... ✅ VALID (26ms)
+Checking pose 36/127 [28.3%]... ✅ VALID (26ms)
+Checking pose 37/127 [29.1%]... ✅ VALID (28ms)
+Checking pose 38/127 [29.9%]... ✅ VALID (25ms)
+Checking pose 39/127 [30.7%]... ✅ VALID (25ms)
+Checking pose 40/127 [31.5%]... ✅ VALID (36ms)
+  === Progress Summary: 40/127 checked | Valid: 29 | Invalid: 11 | Success Rate: 72.5% ===
+Checking pose 41/127 [32.3%]... ❌ INVALID (24ms)
+Checking pose 42/127 [33.1%]... ✅ VALID (42ms)
+Checking pose 43/127 [33.9%]... ✅ VALID (43ms)
+Checking pose 44/127 [34.6%]... ✅ VALID (41ms)
+Checking pose 45/127 [35.4%]... ✅ VALID (42ms)
+Checking pose 46/127 [36.2%]... ✅ VALID (41ms)
+Checking pose 47/127 [37.0%]... ✅ VALID (41ms)
+Checking pose 48/127 [37.8%]... ✅ VALID (37ms)
+Checking pose 49/127 [38.6%]... ✅ VALID (41ms)
+Checking pose 50/127 [39.4%]... ✅ VALID (40ms)
+  === Progress Summary: 50/127 checked | Valid: 38 | Invalid: 12 | Success Rate: 76.0% ===
+Checking pose 51/127 [40.2%]... ✅ VALID (43ms)
+Checking pose 52/127 [40.9%]... ✅ VALID (43ms)
+Checking pose 53/127 [41.7%]... ✅ VALID (42ms)
+Checking pose 54/127 [42.5%]... ✅ VALID (41ms)
+Checking pose 55/127 [43.3%]... ✅ VALID (46ms)
+Checking pose 56/127 [44.1%]... ✅ VALID (40ms)
+Checking pose 57/127 [44.9%]... ✅ VALID (41ms)
+Checking pose 58/127 [45.7%]... ✅ VALID (42ms)
+Checking pose 59/127 [46.5%]... ✅ VALID (38ms)
+Checking pose 60/127 [47.2%]... ✅ VALID (36ms)
+  === Progress Summary: 60/127 checked | Valid: 48 | Invalid: 12 | Success Rate: 80.0% ===
+Checking pose 61/127 [48.0%]... ✅ VALID (36ms)
+Checking pose 62/127 [48.8%]... ✅ VALID (47ms)
+Checking pose 63/127 [49.6%]... ✅ VALID (42ms)
+Checking pose 64/127 [50.4%]... ✅ VALID (43ms)
+Checking pose 65/127 [51.2%]... ✅ VALID (41ms)
+Checking pose 66/127 [52.0%]... ✅ VALID (51ms)
+Checking pose 67/127 [52.8%]... ✅ VALID (52ms)
+Checking pose 68/127 [53.5%]... ✅ VALID (54ms)
+Checking pose 69/127 [54.3%]... ✅ VALID (54ms)
+Checking pose 70/127 [55.1%]... ✅ VALID (65ms)
+  === Progress Summary: 70/127 checked | Valid: 58 | Invalid: 12 | Success Rate: 82.9% ===
+Checking pose 71/127 [55.9%]... ✅ VALID (55ms)
+Checking pose 72/127 [56.7%]... ✅ VALID (55ms)
+Checking pose 73/127 [57.5%]... ✅ VALID (54ms)
+Checking pose 74/127 [58.3%]... ✅ VALID (50ms)
+Checking pose 75/127 [59.1%]... ✅ VALID (58ms)
+Checking pose 76/127 [59.8%]... ✅ VALID (48ms)
+Checking pose 77/127 [60.6%]... ✅ VALID (53ms)
+Checking pose 78/127 [61.4%]... ✅ VALID (51ms)
+Checking pose 79/127 [62.2%]... ✅ VALID (53ms)
+Checking pose 80/127 [63.0%]... ✅ VALID (70ms)
+  === Progress Summary: 80/127 checked | Valid: 68 | Invalid: 12 | Success Rate: 85.0% ===
+Checking pose 81/127 [63.8%]... ✅ VALID (56ms)
+Checking pose 82/127 [64.6%]... ✅ VALID (85ms)
+Checking pose 83/127 [65.4%]... ✅ VALID (83ms)
+Checking pose 84/127 [66.1%]... ✅ VALID (83ms)
+Checking pose 85/127 [66.9%]... ✅ VALID (88ms)
+Checking pose 86/127 [67.7%]... ✅ VALID (74ms)
+Checking pose 87/127 [68.5%]... ✅ VALID (75ms)
+Checking pose 88/127 [69.3%]... ✅ VALID (75ms)
+Checking pose 89/127 [70.1%]... ✅ VALID (65ms)
+Checking pose 90/127 [70.9%]... ✅ VALID (66ms)
+  === Progress Summary: 90/127 checked | Valid: 78 | Invalid: 12 | Success Rate: 86.7% ===
+Checking pose 91/127 [71.7%]... ❌ INVALID (49ms)
+Checking pose 92/127 [72.4%]... ✅ VALID (55ms)
+Checking pose 93/127 [73.2%]... ✅ VALID (53ms)
+Checking pose 94/127 [74.0%]... ✅ VALID (50ms)
+Checking pose 95/127 [74.8%]... ✅ VALID (51ms)
+Checking pose 96/127 [75.6%]... ❌ INVALID (36ms)
+Checking pose 97/127 [76.4%]... ❌ INVALID (38ms)
+Checking pose 98/127 [77.2%]... ❌ INVALID (37ms)
+Checking pose 99/127 [78.0%]... ✅ VALID (48ms)
+Checking pose 100/127 [78.7%]... ✅ VALID (46ms)
+  === Progress Summary: 100/127 checked | Valid: 84 | Invalid: 16 | Success Rate: 84.0% ===
+Checking pose 101/127 [79.5%]... ✅ VALID (52ms)
+Checking pose 102/127 [80.3%]... ❌ INVALID (40ms)
+Checking pose 103/127 [81.1%]... ✅ VALID (46ms)
+Checking pose 104/127 [81.9%]... ✅ VALID (60ms)
+Checking pose 105/127 [82.7%]... ✅ VALID (47ms)
+Checking pose 106/127 [83.5%]... ✅ VALID (49ms)
+Checking pose 107/127 [84.3%]... ✅ VALID (48ms)
+Checking pose 108/127 [85.0%]... ✅ VALID (43ms)
+Checking pose 109/127 [85.8%]... ✅ VALID (63ms)
+Checking pose 110/127 [86.6%]... ✅ VALID (125ms)
+  === Progress Summary: 110/127 checked | Valid: 93 | Invalid: 17 | Success Rate: 84.5% ===
+Checking pose 111/127 [87.4%]... ✅ VALID (107ms)
+Checking pose 112/127 [88.2%]... ✅ VALID (65ms)
+Checking pose 113/127 [89.0%]... ✅ VALID (115ms)
+Checking pose 114/127 [89.8%]... ✅ VALID (125ms)
+Checking pose 115/127 [90.6%]... ❌ INVALID (93ms)
+Checking pose 116/127 [91.3%]... ✅ VALID (79ms)
+Checking pose 117/127 [92.1%]... ✅ VALID (159ms)
+Checking pose 118/127 [92.9%]... ✅ VALID (168ms)
+Checking pose 119/127 [93.7%]... ✅ VALID (135ms)
+Checking pose 120/127 [94.5%]... ✅ VALID (78ms)
+  === Progress Summary: 120/127 checked | Valid: 102 | Invalid: 18 | Success Rate: 85.0% ===
+Checking pose 121/127 [95.3%]... ✅ VALID (226ms)
+Checking pose 122/127 [96.1%]... ✅ VALID (171ms)
+Checking pose 123/127 [96.9%]... ✅ VALID (153ms)
+Checking pose 124/127 [97.6%]... ✅ VALID (159ms)
+Checking pose 125/127 [98.4%]... ✅ VALID (190ms)
+Checking pose 126/127 [99.2%]... ✅ VALID (221ms)
+Checking pose 127/127 [100.0%]... ❌ INVALID (89ms)
+Phase 1 Complete: Found 108 valid poses out of 127 total poses
+Valid poses: 108, Invalid poses: 19
+
+Phase 2: Generating trajectory pairs from valid poses...
+  Generated pair 1: pose 66 -> pose 39
+  Generated pair 2: pose 91 -> pose 43
+  Generated pair 3: pose 124 -> pose 69
+  Generated pair 4: pose 81 -> pose 122
+  Generated pair 5: pose 56 -> pose 94
+  Generated pair 6: pose 39 -> pose 34
+  Generated pair 7: pose 43 -> pose 38
+  Generated pair 8: pose 69 -> pose 61
+  Generated pair 9: pose 71 -> pose 111
+  Generated pair 10: pose 34 -> pose 87
+  Generated pair 11: pose 75 -> pose 124
+  Generated pair 12: pose 9 -> pose 69
+  Generated pair 13: pose 24 -> pose 88
+  Generated pair 14: pose 52 -> pose 46
+  Generated pair 15: pose 106 -> pose 24
+  Generated pair 16: pose 43 -> pose 79
+  Generated pair 17: pose 120 -> pose 84
+  Generated pair 18: pose 124 -> pose 81
+  Generated pair 19: pose 72 -> pose 22
+  Generated pair 20: pose 45 -> pose 103
+  Generated pair 21: pose 35 -> pose 36
+  Generated pair 22: pose 82 -> pose 44
+  Generated pair 23: pose 26 -> pose 74
+  Generated pair 24: pose 32 -> pose 104
+  Generated pair 25: pose 115 -> pose 21
+  Generated pair 26: pose 44 -> pose 116
+  Generated pair 27: pose 57 -> pose 109
+  Generated pair 28: pose 92 -> pose 27
+  Generated pair 29: pose 41 -> pose 51
+  Generated pair 30: pose 50 -> pose 0
+  Generated pair 31: pose 86 -> pose 47
+  Generated pair 32: pose 56 -> pose 112
+  Generated pair 33: pose 92 -> pose 29
+  Generated pair 34: pose 111 -> pose 35
+  Generated pair 35: pose 112 -> pose 110
+  Generated pair 36: pose 27 -> pose 66
+  Generated pair 37: pose 76 -> pose 31
+  Generated pair 38: pose 50 -> pose 31
+  Generated pair 39: pose 56 -> pose 38
+  Generated pair 40: pose 99 -> pose 73
+  Generated pair 41: pose 70 -> pose 13
+  Generated pair 42: pose 99 -> pose 53
+  Generated pair 43: pose 79 -> pose 52
+  Generated pair 44: pose 67 -> pose 61
+  Generated pair 45: pose 118 -> pose 108
+  Generated pair 46: pose 49 -> pose 72
+  Generated pair 47: pose 34 -> pose 84
+  Generated pair 48: pose 9 -> pose 10
+  Generated pair 49: pose 44 -> pose 74
+  Generated pair 50: pose 24 -> pose 118
+Phase 2 Complete: Generated 50 trajectory pairs from 108 valid poses
+
+Phase 3: Running STOMP evaluation on valid pairs...
+Total pairs to evaluate: 50
+Evaluating pair 1/50 [2.0%] (pose 66 → pose 39)...[19:26:49.524] [T:0x205621f00] [INFO]  STOMP optimization: 11 samples, 50 max iterations
+[19:26:49.845] [T:0x205621f00] [INFO]  STOMP completed (cost: 1.1293, 321ms)
+ ✅ SUCCESS (322ms, 50 waypoints, length=1.63, clearance=0.039m)
+Evaluating pair 2/50 [4.0%] (pose 91 → pose 43)...[19:26:49.846] [T:0x205621f00] [INFO]  STOMP optimization: 11 samples, 50 max iterations
+[19:26:50.160] [T:0x205621f00] [INFO]  STOMP completed (cost: 0.8947, 313ms)
+ ✅ SUCCESS (314ms, 50 waypoints, length=1.35, clearance=0.048m)
+Evaluating pair 3/50 [6.0%] (pose 124 → pose 69)...[19:26:50.161] [T:0x205621f00] [INFO]  STOMP optimization: 11 samples, 50 max iterations
+[19:26:50.355] [T:0x205621f00] [INFO]  STOMP completed (cost: 0.2519, 193ms)
+ ✅ SUCCESS (194ms, 50 waypoints, length=6.30, clearance=0.188m)
+Evaluating pair 4/50 [8.0%] (pose 81 → pose 122)...[19:26:50.356] [T:0x205621f00] [INFO]  STOMP optimization: 11 samples, 50 max iterations
+[19:26:50.582] [T:0x205621f00] [INFO]  STOMP completed (cost: 0.1591, 226ms)
+ ✅ SUCCESS (227ms, 50 waypoints, length=4.35, clearance=0.151m)
+Evaluating pair 5/50 [10.0%] (pose 56 → pose 94)...[19:26:50.583] [T:0x205621f00] [INFO]  STOMP optimization: 11 samples, 50 max iterations
+[19:26:50.835] [T:0x205621f00] [INFO]  STOMP completed (cost: 0.7137, 252ms)
+ ✅ SUCCESS (253ms, 50 waypoints, length=2.84, clearance=0.116m)
+  === STOMP Progress: 5/50 | Success: 5/5 (100.0%) ===
+Evaluating pair 6/50 [12.0%] (pose 39 → pose 34)...[19:26:50.836] [T:0x205621f00] [INFO]  STOMP optimization: 11 samples, 50 max iterations
+[19:26:51.127] [T:0x205621f00] [INFO]  STOMP completed (cost: 1.5880, 291ms)
+ ✅ SUCCESS (291ms, 50 waypoints, length=0.52, clearance=0.016m)
+Evaluating pair 7/50 [14.0%] (pose 43 → pose 38)...[19:26:51.128] [T:0x205621f00] [INFO]  STOMP optimization: 11 samples, 50 max iterations
+[19:26:51.420] [T:0x205621f00] [INFO]  STOMP completed (cost: 1.1262, 291ms)
+ ✅ SUCCESS (292ms, 50 waypoints, length=1.14, clearance=0.028m)
+Evaluating pair 8/50 [16.0%] (pose 69 → pose 61)...[19:26:51.421] [T:0x205621f00] [INFO]  STOMP optimization: 11 samples, 50 max iterations
+[19:26:51.714] [T:0x205621f00] [INFO]  STOMP completed (cost: 1.9253, 293ms)
+ ✅ SUCCESS (294ms, 50 waypoints, length=0.31, clearance=0.011m)
+Evaluating pair 9/50 [18.0%] (pose 71 → pose 111)...[19:26:51.715] [T:0x205621f00] [INFO]  STOMP optimization: 11 samples, 50 max iterations
+[19:26:51.994] [T:0x205621f00] [INFO]  STOMP completed (cost: 0.4193, 278ms)
+ ✅ SUCCESS (279ms, 50 waypoints, length=1.56, clearance=0.076m)
+Evaluating pair 10/50 [20.0%] (pose 34 → pose 87)...[19:26:51.995] [T:0x205621f00] [INFO]  STOMP optimization: 11 samples, 50 max iterations
+[19:26:52.231] [T:0x205621f00] [INFO]  STOMP completed (cost: 0.4373, 236ms)
+ ✅ SUCCESS (237ms, 50 waypoints, length=2.41, clearance=0.041m)
+  === STOMP Progress: 10/50 | Success: 10/10 (100.0%) ===
+Evaluating pair 11/50 [22.0%] (pose 75 → pose 124)...[19:26:52.232] [T:0x205621f00] [INFO]  STOMP optimization: 11 samples, 50 max iterations
+[19:26:52.439] [T:0x205621f00] [INFO]  STOMP completed (cost: 0.1867, 207ms)
+ ✅ SUCCESS (208ms, 50 waypoints, length=5.03, clearance=0.186m)
+Evaluating pair 12/50 [24.0%] (pose 9 → pose 69)...[19:26:52.440] [T:0x205621f00] [INFO]  STOMP optimization: 11 samples, 50 max iterations
+[19:26:52.473] [T:0x205621f00] [WARN]  STOMP failed after 50 iterations (32ms)
+ ❌ FAILED (33ms)
+Evaluating pair 13/50 [26.0%] (pose 24 → pose 88)...[19:26:52.473] [T:0x205621f00] [INFO]  STOMP optimization: 11 samples, 50 max iterations
+[19:26:52.515] [T:0x205621f00] [WARN]  STOMP failed after 50 iterations (41ms)
+ ❌ FAILED (42ms)
+Evaluating pair 14/50 [28.0%] (pose 52 → pose 46)...[19:26:52.515] [T:0x205621f00] [INFO]  STOMP optimization: 11 samples, 50 max iterations
+[19:26:52.816] [T:0x205621f00] [INFO]  STOMP completed (cost: 1.3126, 300ms)
+ ✅ SUCCESS (301ms, 50 waypoints, length=0.35, clearance=0.011m)
+Evaluating pair 15/50 [30.0%] (pose 106 → pose 24)...[19:26:52.817] [T:0x205621f00] [INFO]  STOMP optimization: 11 samples, 50 max iterations
+[19:26:52.898] [T:0x205621f00] [WARN]  STOMP failed after 50 iterations (81ms)
+ ❌ FAILED (82ms)
+  === STOMP Progress: 15/50 | Success: 12/15 (80.0%) ===
+Evaluating pair 16/50 [32.0%] (pose 43 → pose 79)...[19:26:52.899] [T:0x205621f00] [INFO]  STOMP optimization: 11 samples, 50 max iterations
+[19:26:53.341] [T:0x205621f00] [INFO]  STOMP completed (cost: 0.4791, 442ms)
+ ✅ SUCCESS (443ms, 50 waypoints, length=1.20, clearance=0.047m)
+Evaluating pair 17/50 [34.0%] (pose 120 → pose 84)...[19:26:53.342] [T:0x205621f00] [INFO]  STOMP optimization: 11 samples, 50 max iterations
+[19:26:53.570] [T:0x205621f00] [INFO]  STOMP completed (cost: 0.2601, 227ms)
+ ✅ SUCCESS (228ms, 50 waypoints, length=4.61, clearance=0.106m)
+Evaluating pair 18/50 [36.0%] (pose 124 → pose 81)...[19:26:53.571] [T:0x205621f00] [INFO]  STOMP optimization: 11 samples, 50 max iterations
+[19:26:53.755] [T:0x205621f00] [INFO]  STOMP completed (cost: 0.2254, 184ms)
+ ✅ SUCCESS (185ms, 50 waypoints, length=5.01, clearance=0.135m)
+Evaluating pair 19/50 [38.0%] (pose 72 → pose 22)...[19:26:53.756] [T:0x205621f00] [INFO]  STOMP optimization: 11 samples, 50 max iterations
+[19:26:53.984] [T:0x205621f00] [INFO]  STOMP completed (cost: 0.9112, 228ms)
+ ✅ SUCCESS (228ms, 50 waypoints, length=2.45, clearance=0.062m)
+Evaluating pair 20/50 [40.0%] (pose 45 → pose 103)...[19:26:53.985] [T:0x205621f00] [INFO]  STOMP optimization: 11 samples, 50 max iterations
+[19:26:54.247] [T:0x205621f00] [INFO]  STOMP completed (cost: 0.6805, 261ms)
+ ✅ SUCCESS (262ms, 50 waypoints, length=1.92, clearance=0.076m)
+  === STOMP Progress: 20/50 | Success: 17/20 (85.0%) ===
+Evaluating pair 21/50 [42.0%] (pose 35 → pose 36)...[19:26:54.247] [T:0x205621f00] [INFO]  STOMP optimization: 11 samples, 50 max iterations
+[19:26:54.544] [T:0x205621f00] [INFO]  STOMP completed (cost: 1.3012, 296ms)
+ ✅ SUCCESS (297ms, 50 waypoints, length=0.13, clearance=0.005m)
+Evaluating pair 22/50 [44.0%] (pose 82 → pose 44)...[19:26:54.545] [T:0x205621f00] [INFO]  STOMP optimization: 11 samples, 50 max iterations
+[19:26:54.792] [T:0x205621f00] [INFO]  STOMP completed (cost: 0.5171, 246ms)
+ ✅ SUCCESS (247ms, 50 waypoints, length=1.91, clearance=0.060m)
+Evaluating pair 23/50 [46.0%] (pose 26 → pose 74)...[19:26:54.792] [T:0x205621f00] [INFO]  STOMP optimization: 11 samples, 50 max iterations
+[19:26:54.828] [T:0x205621f00] [WARN]  STOMP failed after 50 iterations (35ms)
+ ❌ FAILED (35ms)
+Evaluating pair 24/50 [48.0%] (pose 32 → pose 104)...[19:26:54.828] [T:0x205621f00] [INFO]  STOMP optimization: 11 samples, 50 max iterations
+[19:26:55.007] [T:0x205621f00] [INFO]  STOMP completed (cost: 0.3485, 178ms)
+ ✅ SUCCESS (179ms, 50 waypoints, length=3.29, clearance=0.145m)
+Evaluating pair 25/50 [50.0%] (pose 115 → pose 21)...[19:26:55.007] [T:0x205621f00] [INFO]  STOMP optimization: 11 samples, 50 max iterations
+[19:26:55.072] [T:0x205621f00] [WARN]  STOMP failed after 50 iterations (64ms)
+ ❌ FAILED (65ms)
+  === STOMP Progress: 25/50 | Success: 20/25 (80.0%) ===
+Evaluating pair 26/50 [52.0%] (pose 44 → pose 116)...[19:26:55.072] [T:0x205621f00] [INFO]  STOMP optimization: 11 samples, 50 max iterations
+[19:26:55.127] [T:0x205621f00] [WARN]  STOMP failed after 50 iterations (54ms)
+ ❌ FAILED (55ms)
+Evaluating pair 27/50 [54.0%] (pose 57 → pose 109)...[19:26:55.127] [T:0x205621f00] [INFO]  STOMP optimization: 11 samples, 50 max iterations
+[19:26:55.389] [T:0x205621f00] [INFO]  STOMP completed (cost: 0.2767, 261ms)
+ ✅ SUCCESS (262ms, 50 waypoints, length=3.42, clearance=0.132m)
+Evaluating pair 28/50 [56.0%] (pose 92 → pose 27)...[19:26:55.390] [T:0x205621f00] [INFO]  STOMP optimization: 11 samples, 50 max iterations
+[19:26:55.454] [T:0x205621f00] [WARN]  STOMP failed after 50 iterations (64ms)
+ ❌ FAILED (65ms)
+Evaluating pair 29/50 [58.0%] (pose 41 → pose 51)...[19:26:55.455] [T:0x205621f00] [INFO]  STOMP optimization: 11 samples, 50 max iterations
+[19:26:55.731] [T:0x205621f00] [INFO]  STOMP completed (cost: 1.0492, 276ms)
+ ✅ SUCCESS (276ms, 50 waypoints, length=0.34, clearance=0.012m)
+Evaluating pair 30/50 [60.0%] (pose 50 → pose 0)...[19:26:55.731] [T:0x205621f00] [INFO]  STOMP optimization: 11 samples, 50 max iterations
+[19:26:55.818] [T:0x205621f00] [WARN]  STOMP failed after 50 iterations (86ms)
+ ❌ FAILED (86ms)
+  === STOMP Progress: 30/50 | Success: 22/30 (73.3%) ===
+Evaluating pair 31/50 [62.0%] (pose 86 → pose 47)...[19:26:55.818] [T:0x205621f00] [INFO]  STOMP optimization: 11 samples, 50 max iterations
+[19:26:56.074] [T:0x205621f00] [INFO]  STOMP completed (cost: 0.4860, 255ms)
+ ✅ SUCCESS (256ms, 50 waypoints, length=1.90, clearance=0.054m)
+Evaluating pair 32/50 [64.0%] (pose 56 → pose 112)...[19:26:56.075] [T:0x205621f00] [INFO]  STOMP optimization: 11 samples, 50 max iterations
+[19:26:56.292] [T:0x205621f00] [INFO]  STOMP completed (cost: 0.4155, 217ms)
+ ✅ SUCCESS (218ms, 50 waypoints, length=3.87, clearance=0.103m)
+Evaluating pair 33/50 [66.0%] (pose 92 → pose 29)...[19:26:56.293] [T:0x205621f00] [INFO]  STOMP optimization: 11 samples, 50 max iterations
+[19:26:56.544] [T:0x205621f00] [INFO]  STOMP completed (cost: 0.7983, 251ms)
+ ✅ SUCCESS (252ms, 50 waypoints, length=2.64, clearance=0.079m)
+Evaluating pair 34/50 [68.0%] (pose 111 → pose 35)...[19:26:56.545] [T:0x205621f00] [INFO]  STOMP optimization: 11 samples, 50 max iterations
+[19:26:56.756] [T:0x205621f00] [INFO]  STOMP completed (cost: 0.4334, 210ms)
+ ✅ SUCCESS (210ms, 50 waypoints, length=2.85, clearance=0.081m)
+Evaluating pair 35/50 [70.0%] (pose 112 → pose 110)...[19:26:56.756] [T:0x205621f00] [INFO]  STOMP optimization: 11 samples, 50 max iterations
+[19:26:57.017] [T:0x205621f00] [INFO]  STOMP completed (cost: 0.5932, 260ms)
+ ✅ SUCCESS (261ms, 50 waypoints, length=0.66, clearance=0.008m)
+  === STOMP Progress: 35/50 | Success: 27/35 (77.1%) ===
+Evaluating pair 36/50 [72.0%] (pose 27 → pose 66)...[19:26:57.018] [T:0x205621f00] [INFO]  STOMP optimization: 11 samples, 50 max iterations
+[19:26:57.203] [T:0x205621f00] [INFO]  STOMP completed (cost: 1.6656, 185ms)
+ ✅ SUCCESS (185ms, 50 waypoints, length=1.76, clearance=0.034m)
+Evaluating pair 37/50 [74.0%] (pose 76 → pose 31)...[19:26:57.204] [T:0x205621f00] [INFO]  STOMP optimization: 11 samples, 50 max iterations
+[19:26:57.431] [T:0x205621f00] [INFO]  STOMP completed (cost: 1.0422, 226ms)
+ ✅ SUCCESS (227ms, 50 waypoints, length=1.70, clearance=0.043m)
+Evaluating pair 38/50 [76.0%] (pose 50 → pose 31)...[19:26:57.431] [T:0x205621f00] [INFO]  STOMP optimization: 11 samples, 50 max iterations
+[19:26:57.703] [T:0x205621f00] [INFO]  STOMP completed (cost: 0.7857, 271ms)
+ ✅ SUCCESS (272ms, 50 waypoints, length=1.52, clearance=0.044m)
+Evaluating pair 39/50 [78.0%] (pose 56 → pose 38)...[19:26:57.704] [T:0x205621f00] [INFO]  STOMP optimization: 11 samples, 50 max iterations
+[19:26:57.938] [T:0x205621f00] [INFO]  STOMP completed (cost: 0.3890, 233ms)
+ ✅ SUCCESS (234ms, 50 waypoints, length=2.39, clearance=0.029m)
+Evaluating pair 40/50 [80.0%] (pose 99 → pose 73)...[19:26:57.938] [T:0x205621f00] [INFO]  STOMP optimization: 11 samples, 50 max iterations
+[19:26:58.205] [T:0x205621f00] [INFO]  STOMP completed (cost: 0.8461, 266ms)
+ ✅ SUCCESS (267ms, 50 waypoints, length=1.23, clearance=0.016m)
+  === STOMP Progress: 40/50 | Success: 32/40 (80.0%) ===
+Evaluating pair 41/50 [82.0%] (pose 70 → pose 13)...[19:26:58.206] [T:0x205621f00] [INFO]  STOMP optimization: 11 samples, 50 max iterations
+[19:26:58.265] [T:0x205621f00] [WARN]  STOMP failed after 50 iterations (58ms)
+ ❌ FAILED (59ms)
+Evaluating pair 42/50 [84.0%] (pose 99 → pose 53)...[19:26:58.265] [T:0x205621f00] [INFO]  STOMP optimization: 11 samples, 50 max iterations
+[19:26:58.531] [T:0x205621f00] [INFO]  STOMP completed (cost: 0.6490, 266ms)
+ ✅ SUCCESS (267ms, 50 waypoints, length=1.51, clearance=0.049m)
+Evaluating pair 43/50 [86.0%] (pose 79 → pose 52)...[19:26:58.532] [T:0x205621f00] [INFO]  STOMP optimization: 11 samples, 50 max iterations
+[19:26:58.805] [T:0x205621f00] [INFO]  STOMP completed (cost: 0.3971, 273ms)
+ ✅ SUCCESS (273ms, 50 waypoints, length=1.34, clearance=0.051m)
+Evaluating pair 44/50 [88.0%] (pose 67 → pose 61)...[19:26:58.806] [T:0x205621f00] [INFO]  STOMP optimization: 11 samples, 50 max iterations
+[19:26:59.089] [T:0x205621f00] [INFO]  STOMP completed (cost: 1.0368, 282ms)
+ ✅ SUCCESS (283ms, 50 waypoints, length=0.41, clearance=0.010m)
+Evaluating pair 45/50 [90.0%] (pose 118 → pose 108)...[19:26:59.090] [T:0x205621f00] [INFO]  STOMP optimization: 11 samples, 50 max iterations
+[19:26:59.318] [T:0x205621f00] [INFO]  STOMP completed (cost: 0.3279, 228ms)
+ ✅ SUCCESS (228ms, 50 waypoints, length=3.39, clearance=0.069m)
+  === STOMP Progress: 45/50 | Success: 36/45 (80.0%) ===
+Evaluating pair 46/50 [92.0%] (pose 49 → pose 72)...[19:26:59.319] [T:0x205621f00] [INFO]  STOMP optimization: 11 samples, 50 max iterations
+[19:26:59.598] [T:0x205621f00] [INFO]  STOMP completed (cost: 0.6409, 279ms)
+ ✅ SUCCESS (280ms, 50 waypoints, length=0.75, clearance=0.010m)
+Evaluating pair 47/50 [94.0%] (pose 34 → pose 84)...[19:26:59.599] [T:0x205621f00] [INFO]  STOMP optimization: 11 samples, 50 max iterations
+[19:26:59.637] [T:0x205621f00] [WARN]  STOMP failed after 50 iterations (38ms)
+ ❌ FAILED (38ms)
+Evaluating pair 48/50 [96.0%] (pose 9 → pose 10)...[19:26:59.637] [T:0x205621f00] [INFO]  STOMP optimization: 11 samples, 50 max iterations
+[19:26:59.882] [T:0x205621f00] [INFO]  STOMP completed (cost: 1.2608, 244ms)
+ ✅ SUCCESS (245ms, 50 waypoints, length=0.19, clearance=0.009m)
+Evaluating pair 49/50 [98.0%] (pose 44 → pose 74)...[19:26:59.883] [T:0x205621f00] [INFO]  STOMP optimization: 11 samples, 50 max iterations
+[19:27:00.157] [T:0x205621f00] [INFO]  STOMP completed (cost: 1.3421, 274ms)
+ ✅ SUCCESS (275ms, 50 waypoints, length=0.95, clearance=0.018m)
+Evaluating pair 50/50 [100.0%] (pose 24 → pose 118)...[19:27:00.158] [T:0x205621f00] [INFO]  STOMP optimization: 11 samples, 50 max iterations
+[19:27:00.186] [T:0x205621f00] [WARN]  STOMP failed after 50 iterations (28ms)
+ ❌ FAILED (28ms)
+  === STOMP Progress: 50/50 | Success: 39/50 (78.0%) ===
+
+=== EVALUATION SUMMARY ===
+Total poses loaded: 127
+Valid poses found: 108
+Trajectory pairs requested: 50
+Trajectory pairs evaluated: 50
+Successful STOMP trajectories: 39
+DEBUG: evaluateSTOMPTrajectories returned
+\nResults:
+  Success Rate: 78.0%
+  Avg Planning Time: 257.6ms
+  Avg Path Length: 2.1
+  Avg Smoothness: 1.0
+  Avg Clearance: 0.1m
+  Composite Score: 8.9
+Results saved to: trial_results.json
+OBJECTIVE_VALUE: 8.9

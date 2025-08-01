@@ -1,4 +1,5 @@
 #include "GeometryLib/Obstacle.h"
+#include <iostream>
 
 double BoxObstacle::implicitFunction(Vec3 point) const
 {
@@ -139,8 +140,24 @@ double BoxObstacle::getDistance(const Vec3 &point) const
 {
     Vec3 localPoint = _transform.inverse() * point;
     localPoint = localPoint.cwiseQuotient(_scale);
-    Vec3 closestPoint = localPoint.cwiseMax(Vec3(-0.5, -0.5, -0.5)).cwiseMin(Vec3(0.5, 0.5, 0.5));
-    return (_transform * (closestPoint.cwiseProduct(_scale)) - point).norm();
+    
+    // Check if point is inside the box (all coordinates within [-0.5, 0.5])
+    bool isInside = (localPoint.x() >= -0.5 && localPoint.x() <= 0.5) &&
+                    (localPoint.y() >= -0.5 && localPoint.y() <= 0.5) &&
+                    (localPoint.z() >= -0.5 && localPoint.z() <= 0.5);
+    
+    if (isInside) {
+        // Point is inside: return negative distance (penetration depth)
+        // Distance to nearest face
+        Vec3 distToFaces = Vec3(0.5, 0.5, 0.5) - localPoint.cwiseAbs();
+        double minDistToFace = distToFaces.minCoeff();
+        // Scale back to world coordinates
+        return -minDistToFace * _scale.minCoeff();
+    } else {
+        // Point is outside: return positive distance to surface
+        Vec3 closestPoint = localPoint.cwiseMax(Vec3(-0.5, -0.5, -0.5)).cwiseMin(Vec3(0.5, 0.5, 0.5));
+        return (_transform * (closestPoint.cwiseProduct(_scale)) - point).norm();
+    }
 }
 
 Vec3 BoxObstacle::getDistanceGradient(const Vec3 &point) const
