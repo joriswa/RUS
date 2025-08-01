@@ -79,24 +79,25 @@ private:
  */
 struct StompConfig
 {
-    int numNoisyTrajectories = 12;       ///< Number of noisy trajectory samples per iteration (increased for better exploration)
-    int numBestSamples = 4;              ///< Number of best samples to use for updates
+    int numNoisyTrajectories = 30;       ///< Number of noisy trajectory samples per iteration (increased for better exploration)
+    int numBestSamples = 30;              ///< Number of best samples to use for updates
     int maxIterations = 200;             ///< Maximum optimization iterations (reduced from 1000 for better performance)
-    int N = 40;                          ///< Number of trajectory points (balanced between resolution and computation)
+    int N = 60;                          ///< Number of trajectory points (fixed at 75 for consistent optimization)
     double dt = 0.1;                     ///< Fixed time step for trajectory discretization (will be adjusted based on trajectory duration)
-    double learningRate = 0.08;          ///< Learning rate for trajectory updates (slightly reduced for stability)
-    double temperature = 10.0;           ///< Temperature parameter for sample weighting (simplified from Optuna value)
+    double learningRate = 1.;          ///< Learning rate for trajectory updates (slightly reduced for stability)
+    double temperature = .5;           ///< Temperature parameter for sample weighting (simplified from Optuna value)
     int numJoints = 7;                   ///< Number of robot joints
     double outputFrequency = 1000.0;     ///< Output frequency in Hz for quintic polynomial fitting
     double obstacleCostWeight = 2.0;     ///< Weight for obstacle cost (increased due to normalized cost structure)
     double constraintCostWeight = 1.0;   ///< Weight for constraint cost (reduced due to normalized cost structure)
+    double controlCostWeight = .000000001;      ///< Weight for control/smoothness cost from original STOMP paper
 
     Eigen::VectorXd jointStdDevs         ///< Standard deviations for noise per joint (balanced for exploration)
-        = (Eigen::VectorXd(7) << 0.08, 0.12, 0.08, 0.05, 0.04, 0.10, 0.04).finished();
+        =  0.5 * (Eigen::VectorXd(7) << 0.08, 0.12, 0.08, 0.05, 0.04, 0.10, 0.04).finished();
 
     bool enableEarlyStopping = true;       ///< Enable early stopping when collision-free trajectory found
     int earlyStoppingPatience = 15;       ///< Number of consecutive collision-free iterations before stopping (increased for better solutions)
-    double maxComputeTimeMs = 10000.0;    ///< Maximum computation time in milliseconds (10 seconds reasonable limit)
+    double maxComputeTimeMs = 0.0;    ///< Maximum computation time in milliseconds (10 seconds reasonable limit)
     bool disableInternalParallelization = false; ///< Disable internal STOMP parallelization for batch mode optimization
 };
 
@@ -184,6 +185,28 @@ public:
      * @param maxAcc Maximum joint accelerations  
      */
     ConstraintCostCalculator(const std::vector<double> &maxVel, const std::vector<double> &maxAcc);
+
+    double computeCost(const Eigen::MatrixXd &trajectory, double dt) override;
+};
+
+/**
+ * @brief Cost calculator for trajectory smoothness control from original STOMP paper
+ * 
+ * Computes the control cost q_control = (1/2) * θ^T * R * θ where R is the 
+ * finite difference matrix that penalizes acceleration (second-order derivatives).
+ * This encourages smooth, natural trajectories by minimizing squared accelerations.
+ */
+class ControlCostCalculator : public CostCalculator
+{
+private:
+    Eigen::MatrixXd _R;  ///< Control cost matrix (finite difference matrix for acceleration)
+
+public:
+    /**
+     * @brief Construct control cost calculator
+     * @param R Control cost matrix from STOMP finite difference formulation
+     */
+    ControlCostCalculator(const Eigen::MatrixXd &R);
 
     double computeCost(const Eigen::MatrixXd &trajectory, double dt) override;
 };
