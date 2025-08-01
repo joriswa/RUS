@@ -1,0 +1,1125 @@
+<?xml version="1.0"?>
+<robot name="collision_robot">
+  <link name="environment">
+    <collision name="environment_1">
+      <origin xyz="0.100000 -0.290000 0.032500" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.700000 0.280000 0.065000"/>
+      </geometry>
+    </collision>
+    <collision name="environment_2">
+      <origin xyz="-0.050000 -0.290000 0.200000" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.300000 0.280000 0.400000"/>
+      </geometry>
+    </collision>
+    <collision name="environment_3">
+      <origin xyz="0.100000 -0.290000 0.062500" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.320000 0.280000 0.125000"/>
+      </geometry>
+    </collision>
+    <collision name="environment_4">
+      <origin xyz="-0.150000 -0.290000 0.550000" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.300000 0.150000 0.300000"/>
+      </geometry>
+    </collision>
+    <collision name="environment_5">
+      <origin xyz="0.725000 -0.300000 0.250000" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.150000 0.428000 0.540000"/>
+      </geometry>
+    </collision>
+    <collision name="environment_6">
+      <origin xyz="0.000000 0.000000 -0.070000" rpy="0 0 0"/>
+      <geometry>
+        <box size="2.000000 2.000000 0.100000"/>
+      </geometry>
+    </collision>
+    <collision name="environment_7">
+      <origin xyz="-0.500000 0.000000 1.000000" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.100000 2.000000 2.000000"/>
+      </geometry>
+    </collision>
+    <collision name="environment_8">
+      <origin xyz="0.000000 -0.700000 1.000000" rpy="0 0 0"/>
+      <geometry>
+        <box size="2.000000 0.100000 2.000000"/>
+      </geometry>
+    </collision>
+    <collision name="environment_9">
+      <origin xyz="0.000000 0.500000 1.000000" rpy="0 0 0"/>
+      <geometry>
+        <box size="2.000000 0.100000 2.000000"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <link name="leg">
+    <collision name="leg_1">
+      <origin xyz="0.323458 -0.304675 0.340525" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_2">
+      <origin xyz="0.340111 -0.306909 0.342956" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_3">
+      <origin xyz="0.360570 -0.302290 0.342245" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_4">
+      <origin xyz="0.378303 -0.301080 0.343820" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_5">
+      <origin xyz="0.395476 -0.305014 0.345408" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_6">
+      <origin xyz="0.323365 -0.290179 0.331661" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_7">
+      <origin xyz="0.336217 -0.291420 0.333785" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_8">
+      <origin xyz="0.356263 -0.284731 0.339775" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_9">
+      <origin xyz="0.375572 -0.294548 0.344474" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_10">
+      <origin xyz="0.320525 -0.273750 0.335493" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_11">
+      <origin xyz="0.336016 -0.273554 0.340241" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_12">
+      <origin xyz="0.364902 -0.277857 0.344934" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_13">
+      <origin xyz="0.371200 -0.277769 0.345638" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_14">
+      <origin xyz="0.316620 -0.259002 0.344331" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_15">
+      <origin xyz="0.360403 -0.320929 0.364469" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_16">
+      <origin xyz="0.381532 -0.320852 0.362273" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_17">
+      <origin xyz="0.396411 -0.322724 0.361094" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_18">
+      <origin xyz="0.322043 -0.312767 0.356989" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_19">
+      <origin xyz="0.337889 -0.314612 0.354066" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_20">
+      <origin xyz="0.356431 -0.313855 0.353185" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_21">
+      <origin xyz="0.373852 -0.312085 0.351996" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_22">
+      <origin xyz="0.398384 -0.314385 0.353104" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_23">
+      <origin xyz="0.419591 -0.310238 0.353678" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_24">
+      <origin xyz="0.436687 -0.307306 0.357742" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_25">
+      <origin xyz="0.454984 -0.314171 0.363533" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_26">
+      <origin xyz="0.393133 -0.288776 0.348681" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_27">
+      <origin xyz="0.417253 -0.291677 0.352248" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_28">
+      <origin xyz="0.438915 -0.290434 0.359309" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_29">
+      <origin xyz="0.457710 -0.294274 0.363632" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_30">
+      <origin xyz="0.317252 -0.259859 0.348711" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_31">
+      <origin xyz="0.342692 -0.263940 0.353566" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_32">
+      <origin xyz="0.359209 -0.265472 0.356224" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_33">
+      <origin xyz="0.377498 -0.264630 0.362470" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_34">
+      <origin xyz="0.399148 -0.274558 0.357211" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_35">
+      <origin xyz="0.411217 -0.277036 0.361484" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_36">
+      <origin xyz="0.319436 -0.254136 0.355824" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_37">
+      <origin xyz="0.334431 -0.256444 0.361042" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_38">
+      <origin xyz="0.349627 -0.257092 0.364571" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_39">
+      <origin xyz="0.362864 -0.321264 0.377899" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_40">
+      <origin xyz="0.378246 -0.322770 0.377330" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_41">
+      <origin xyz="0.399200 -0.325652 0.377633" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_42">
+      <origin xyz="0.409099 -0.323112 0.376522" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_43">
+      <origin xyz="0.430386 -0.322278 0.376254" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_44">
+      <origin xyz="0.459525 -0.323508 0.373187" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_45">
+      <origin xyz="0.475191 -0.328059 0.378674" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_46">
+      <origin xyz="0.500705 -0.321922 0.376805" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_47">
+      <origin xyz="0.516534 -0.324842 0.381705" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_48">
+      <origin xyz="0.537550 -0.323555 0.380763" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_49">
+      <origin xyz="0.316548 -0.310176 0.379595" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_50">
+      <origin xyz="0.337688 -0.316889 0.373761" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_51">
+      <origin xyz="0.355497 -0.317478 0.377083" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_52">
+      <origin xyz="0.452238 -0.317870 0.367095" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_53">
+      <origin xyz="0.475974 -0.309630 0.369703" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_54">
+      <origin xyz="0.496392 -0.305757 0.372912" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_55">
+      <origin xyz="0.516939 -0.316505 0.375580" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_56">
+      <origin xyz="0.539054 -0.309686 0.376539" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_57">
+      <origin xyz="0.551915 -0.301882 0.378592" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_58">
+      <origin xyz="0.318300 -0.280461 0.367775" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_59">
+      <origin xyz="0.441070 -0.280850 0.368562" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_60">
+      <origin xyz="0.459915 -0.283356 0.371449" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_61">
+      <origin xyz="0.477656 -0.286978 0.373936" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_62">
+      <origin xyz="0.496552 -0.289645 0.376373" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_63">
+      <origin xyz="0.518680 -0.288872 0.380518" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_64">
+      <origin xyz="0.540541 -0.290232 0.380544" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_65">
+      <origin xyz="0.555650 -0.293380 0.378614" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_66">
+      <origin xyz="0.315947 -0.264103 0.378956" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_67">
+      <origin xyz="0.362297 -0.260348 0.374269" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_68">
+      <origin xyz="0.397774 -0.267461 0.378723" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_69">
+      <origin xyz="0.414682 -0.271950 0.376733" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_70">
+      <origin xyz="0.432687 -0.276226 0.374641" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_71">
+      <origin xyz="0.454808 -0.278513 0.374504" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_72">
+      <origin xyz="0.474205 -0.277396 0.381859" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_73">
+      <origin xyz="0.318340 -0.252939 0.373142" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_74">
+      <origin xyz="0.337336 -0.256515 0.372596" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_75">
+      <origin xyz="0.349632 -0.257061 0.375375" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_76">
+      <origin xyz="0.363474 -0.319845 0.388694" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_77">
+      <origin xyz="0.380065 -0.321276 0.390674" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_78">
+      <origin xyz="0.397915 -0.324270 0.398593" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_79">
+      <origin xyz="0.424173 -0.323431 0.396892" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_80">
+      <origin xyz="0.440050 -0.329320 0.399337" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_81">
+      <origin xyz="0.453704 -0.331275 0.398495" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_82">
+      <origin xyz="0.476377 -0.336979 0.395328" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_83">
+      <origin xyz="0.498473 -0.333588 0.393679" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_84">
+      <origin xyz="0.519211 -0.334381 0.396571" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_85">
+      <origin xyz="0.537557 -0.332315 0.395632" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_86">
+      <origin xyz="0.225846 -0.301427 0.398026" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_87">
+      <origin xyz="0.231384 -0.299972 0.393447" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_88">
+      <origin xyz="0.318782 -0.303053 0.386402" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_89">
+      <origin xyz="0.341252 -0.308362 0.392935" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_90">
+      <origin xyz="0.356479 -0.309571 0.395940" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_91">
+      <origin xyz="0.374141 -0.314795 0.397860" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_92">
+      <origin xyz="0.541976 -0.314697 0.397484" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_93">
+      <origin xyz="0.556567 -0.304071 0.399013" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_94">
+      <origin xyz="0.169445 -0.296045 0.387959" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_95">
+      <origin xyz="0.239602 -0.298166 0.396674" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_96">
+      <origin xyz="0.299620 -0.286911 0.394093" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_97">
+      <origin xyz="0.318697 -0.290096 0.395945" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_98">
+      <origin xyz="0.338222 -0.286465 0.402611" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_99">
+      <origin xyz="0.378969 -0.279842 0.404870" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_100">
+      <origin xyz="0.512208 -0.280366 0.386367" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_101">
+      <origin xyz="0.541137 -0.283112 0.391860" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_102">
+      <origin xyz="0.558160 -0.289242 0.397591" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_103">
+      <origin xyz="0.288129 -0.278787 0.392917" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_104">
+      <origin xyz="0.317761 -0.270435 0.392980" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_105">
+      <origin xyz="0.338253 -0.268389 0.394495" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_106">
+      <origin xyz="0.357465 -0.268861 0.393899" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_107">
+      <origin xyz="0.376691 -0.265610 0.393249" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_108">
+      <origin xyz="0.398942 -0.270841 0.394679" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_109">
+      <origin xyz="0.417237 -0.271620 0.393250" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_110">
+      <origin xyz="0.441354 -0.272624 0.396348" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_111">
+      <origin xyz="0.464040 -0.271961 0.392999" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_112">
+      <origin xyz="0.482456 -0.272835 0.400392" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_113">
+      <origin xyz="0.502068 -0.276627 0.394310" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_114">
+      <origin xyz="0.518202 -0.276409 0.397531" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_115">
+      <origin xyz="0.534281 -0.276470 0.398858" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_116">
+      <origin xyz="0.555825 -0.278882 0.405927" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_117">
+      <origin xyz="0.320634 -0.259138 0.388424" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_118">
+      <origin xyz="0.439890 -0.319614 0.413840" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_119">
+      <origin xyz="0.462646 -0.328023 0.418435" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_120">
+      <origin xyz="0.478460 -0.337318 0.417721" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_121">
+      <origin xyz="0.494440 -0.337156 0.419356" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_122">
+      <origin xyz="0.519964 -0.336335 0.418683" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_123">
+      <origin xyz="0.536331 -0.334961 0.419662" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_124">
+      <origin xyz="0.367660 -0.299904 0.408938" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_125">
+      <origin xyz="0.381864 -0.309009 0.409207" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_126">
+      <origin xyz="0.398827 -0.311864 0.416932" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_127">
+      <origin xyz="0.414631 -0.314156 0.417061" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_128">
+      <origin xyz="0.446231 -0.316950 0.424359" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_129">
+      <origin xyz="0.558976 -0.305277 0.409502" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_130">
+      <origin xyz="0.360027 -0.287054 0.408410" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_131">
+      <origin xyz="0.384291 -0.286838 0.415089" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_132">
+      <origin xyz="0.396292 -0.290674 0.418405" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_133">
+      <origin xyz="0.416635 -0.283925 0.417227" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_134">
+      <origin xyz="0.436654 -0.282669 0.416975" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_135">
+      <origin xyz="0.456003 -0.280383 0.424817" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_136">
+      <origin xyz="0.542763 -0.281340 0.413313" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_137">
+      <origin xyz="0.555822 -0.282400 0.416745" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_138">
+      <origin xyz="0.440572 -0.276359 0.408867" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_139">
+      <origin xyz="0.461936 -0.272680 0.412143" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_140">
+      <origin xyz="0.479347 -0.271835 0.418233" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_141">
+      <origin xyz="0.500190 -0.272406 0.418350" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_142">
+      <origin xyz="0.517368 -0.273942 0.414839" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_143">
+      <origin xyz="0.537045 -0.276061 0.411082" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_144">
+      <origin xyz="0.557435 -0.277081 0.410543" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_145">
+      <origin xyz="0.463777 -0.322133 0.433565" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_146">
+      <origin xyz="0.474791 -0.330531 0.427546" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_147">
+      <origin xyz="0.498067 -0.327815 0.431499" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_148">
+      <origin xyz="0.520005 -0.328012 0.433455" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_149">
+      <origin xyz="0.538936 -0.326541 0.429992" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_150">
+      <origin xyz="0.421455 -0.305346 0.429306" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_151">
+      <origin xyz="0.440243 -0.306658 0.437746" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_152">
+      <origin xyz="0.455264 -0.311239 0.437937" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_153">
+      <origin xyz="0.476395 -0.316511 0.437562" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_154">
+      <origin xyz="0.500042 -0.303289 0.441363" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_155">
+      <origin xyz="0.520750 -0.312914 0.442226" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_156">
+      <origin xyz="0.535252 -0.312109 0.440709" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_157">
+      <origin xyz="0.559187 -0.303967 0.441796" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_158">
+      <origin xyz="0.571587 -0.305401 0.433715" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_159">
+      <origin xyz="0.406950 -0.297900 0.426786" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_160">
+      <origin xyz="0.419393 -0.292829 0.429744" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_161">
+      <origin xyz="0.436242 -0.294924 0.434883" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_162">
+      <origin xyz="0.459093 -0.289864 0.435538" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_163">
+      <origin xyz="0.472541 -0.288195 0.435601" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_164">
+      <origin xyz="0.499590 -0.287333 0.435634" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_165">
+      <origin xyz="0.519044 -0.289253 0.437850" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_166">
+      <origin xyz="0.533652 -0.287003 0.434729" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_167">
+      <origin xyz="0.556975 -0.287634 0.435400" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_168">
+      <origin xyz="0.577669 -0.292354 0.436938" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_169">
+      <origin xyz="0.481245 -0.277475 0.427311" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_170">
+      <origin xyz="0.500450 -0.276957 0.427633" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_171">
+      <origin xyz="0.520276 -0.278121 0.428019" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_172">
+      <origin xyz="0.569269 -0.274343 0.435988" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_173">
+      <origin xyz="0.565674 -0.307111 0.449334" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_174">
+      <origin xyz="0.577779 -0.304156 0.457701" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_175">
+      <origin xyz="0.599957 -0.317987 0.460035" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_176">
+      <origin xyz="0.608663 -0.306375 0.455941" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+    <collision name="leg_177">
+      <origin xyz="0.575405 -0.293005 0.458619" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020000 0.020000 0.020000"/>
+      </geometry>
+    </collision>
+  </link>
+
+</robot>

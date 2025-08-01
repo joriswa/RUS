@@ -1,28 +1,28 @@
 # Optimized STOMP parameters with heavy failure penalties
-# Best trial: 9
-# Best composite score: 4.200000
-# Total evaluations: 600
+# Best trial: 27
+# Best composite score: 1.248000
+# Total evaluations: 100
 
 csv_file: /Users/joris/Uni/MA/Code/PathPlanner_US_wip/apps/ParameterTuning/Data/Ext_Ant_Scan/scan_pose_list_ee.csv
 evaluation:
-  trajectory_pairs: 30
+  trajectory_pairs: 2
 obstacles_file: /Users/joris/Uni/MA/Code/PathPlanner_US_wip/apps/ParameterTuning/Data/Ext_Ant_Scan/obstacles.xml
 output_file: trial_results.json
 stomp:
   N: 50
-  constraint_cost_weight: 3.0875877758611727
+  constraint_cost_weight: 3.3417376121775995
   joint_std_devs:
-  - 0.1097511058802007
-  - 0.10366719553965768
-  - 0.05580679647895116
-  - 0.1499988646522685
-  - 0.0612900208937102
-  - 0.014783827172642509
-  - 0.03620810490184459
-  learning_rate: 0.9979982774302885
+  - 0.08328967272649988
+  - 0.02171329545664518
+  - 0.01244329588292934
+  - 0.12242294714003704
+  - 0.09215953105728089
+  - 0.06731889036216601
+  - 0.11901248515199181
+  learning_rate: 0.3151272926576154
   max_iterations: 50
-  num_best_samples: 3
-  num_noisy_trajectories: 12
-  obstacle_cost_weight: 3.5304763460000332
-  temperature: 19.289304764744003
+  num_best_samples: 4
+  num_noisy_trajectories: 5
+  obstacle_cost_weight: 4.087635598017474
+  temperature: 6.6436622165877965
 urdf_file: /Users/joris/Uni/MA/robot_definition/panda_US.urdf

@@ -1,0 +1,24 @@
+# Optimal STOMP parameters found by Optuna success rate optimization
+# Trial 0 - Success Rate: 0.0000
+csv_file: "/Users/joris/Uni/MA/Code/PathPlanner_US_wip/apps/ParameterTuning/Data/Ext_Ant_Scan/scan_pose_list_ee.csv"
+obstacles_file: "/Users/joris/Uni/MA/Code/PathPlanner_US_wip/apps/ParameterTuning/Data/Ext_Ant_Scan/obstacles.xml"
+urdf_file: "/Users/joris/Uni/MA/Code/PathPlanner_US_wip/res/scenario_1/panda_US.urdf"
+output_file: "optimal_success_results.json"
+
+stomp:
+  temperature: 9.455220840433633
+  learning_rate: 0.47337712847440644
+  max_iterations: 60
+  N: 60
+  num_noisy_trajectories: 12
+  num_best_samples: 4
+  obstacle_cost_weight: 1.6754010154636385
+  constraint_cost_weight: 5.2892096804113775
+  joint_std_devs: [0.07647284881064399, 0.07217503193163423, 0.062187656008620446, 0.09253650584646653, 0.07648261538153527, 0.09136958187294125, 0.08935187608209424]
+
+evaluation:
+  trajectory_pairs: 20
+
+# Performance metrics:
+# Success Rate: 0.0
+# Avg Planning Time: 0.0ms

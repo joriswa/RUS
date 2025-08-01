@@ -10,7 +10,7 @@
 
 // Compile-time enable/disable logging
 #ifndef LOGGING_ENABLED
-#define LOGGING_ENABLED 0  // DISABLED for performance
+#define LOGGING_ENABLED 1 // DISABLED for performance
 #endif
 
 // Runtime enable/disable for different log levels

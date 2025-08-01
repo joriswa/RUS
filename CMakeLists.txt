@@ -49,6 +49,7 @@ add_subdirectory(apps/ParallelizationBenchmark)
 # add_subdirectory(apps/UltrasoundRepositioningEvaluator)
 # add_subdirectory(apps/TrajectoryPlanningEvaluator)
 add_subdirectory(apps/ParameterTuning)
+add_subdirectory(apps/StompDebugger)
 
 # Install configuration
 include(GNUInstallDirs)

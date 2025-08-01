@@ -1,0 +1,196 @@
+<?xml version="1.0"?>
+<!--
+Complex environment for STOMP debugging
+This creates a challenging scene with multiple obstacles
+-->
+<robot name="complex_debug_environment">
+  
+  <!-- Main work table -->
+  <link name="work_table">
+    <visual>
+      <geometry>
+        <box size="1.0 1.5 0.04"/>
+      </geometry>
+      <origin xyz="0.6 0.0 0.5" rpy="0 0 0"/>
+      <material name="wood">
+        <color rgba="0.6 0.4 0.2 1.0"/>
+      </material>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="1.0 1.5 0.04"/>
+      </geometry>
+      <origin xyz="0.6 0.0 0.5" rpy="0 0 0"/>
+    </collision>
+  </link>
+  
+  <!-- Side table -->
+  <link name="side_table">
+    <visual>
+      <geometry>
+        <box size="0.6 0.8 0.03"/>
+      </geometry>
+      <origin xyz="0.2 0.9 0.3" rpy="0 0 0"/>
+      <material name="wood">
+        <color rgba="0.6 0.4 0.2 1.0"/>
+      </material>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="0.6 0.8 0.03"/>
+      </geometry>
+      <origin xyz="0.2 0.9 0.3" rpy="0 0 0"/>
+    </collision>
+  </link>
+  
+  <!-- Equipment rack -->
+  <link name="equipment_rack">
+    <visual>
+      <geometry>
+        <box size="0.4 0.3 1.8"/>
+      </geometry>
+      <origin xyz="1.2 0.8 0.9" rpy="0 0 0"/>
+      <material name="metal">
+        <color rgba="0.2 0.2 0.2 1.0"/>
+      </material>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="0.4 0.3 1.8"/>
+      </geometry>
+      <origin xyz="1.2 0.8 0.9" rpy="0 0 0"/>
+    </collision>
+  </link>
+  
+  <!-- Overhead beam -->
+  <link name="overhead_beam">
+    <visual>
+      <geometry>
+        <box size="2.0 0.1 0.2"/>
+      </geometry>
+      <origin xyz="0.5 0.3 1.8" rpy="0 0 0"/>
+      <material name="steel">
+        <color rgba="0.4 0.4 0.4 1.0"/>
+      </material>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="2.0 0.1 0.2"/>
+      </geometry>
+      <origin xyz="0.5 0.3 1.8" rpy="0 0 0"/>
+    </collision>
+  </link>
+  
+  <!-- Support pillars -->
+  <link name="pillar_1">
+    <visual>
+      <geometry>
+        <cylinder radius="0.08" length="2.0"/>
+      </geometry>
+      <origin xyz="0.1 -0.6 1.0" rpy="0 0 0"/>
+      <material name="metal">
+        <color rgba="0.5 0.5 0.8 1.0"/>
+      </material>
+    </visual>
+    <collision>
+      <geometry>
+        <cylinder radius="0.08" length="2.0"/>
+      </geometry>
+      <origin xyz="0.1 -0.6 1.0" rpy="0 0 0"/>
+    </collision>
+  </link>
+  
+  <link name="pillar_2">
+    <visual>
+      <geometry>
+        <cylinder radius="0.08" length="2.0"/>
+      </geometry>
+      <origin xyz="0.9 -0.6 1.0" rpy="0 0 0"/>
+      <material name="metal">
+        <color rgba="0.5 0.5 0.8 1.0"/>
+      </material>
+    </visual>
+    <collision>
+      <geometry>
+        <cylinder radius="0.08" length="2.0"/>
+      </geometry>
+      <origin xyz="0.9 -0.6 1.0" rpy="0 0 0"/>
+    </collision>
+  </link>
+  
+  <!-- Narrow passage walls -->
+  <link name="passage_wall_1">
+    <visual>
+      <geometry>
+        <box size="0.05 0.5 1.2"/>
+      </geometry>
+      <origin xyz="0.4 -1.0 0.6" rpy="0 0 0"/>
+      <material name="concrete">
+        <color rgba="0.7 0.7 0.7 1.0"/>
+      </material>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="0.05 0.5 1.2"/>
+      </geometry>
+      <origin xyz="0.4 -1.0 0.6" rpy="0 0 0"/>
+    </collision>
+  </link>
+  
+  <link name="passage_wall_2">
+    <visual>
+      <geometry>
+        <box size="0.05 0.5 1.2"/>
+      </geometry>
+      <origin xyz="0.6 -1.0 0.6" rpy="0 0 0"/>
+      <material name="concrete">
+        <color rgba="0.7 0.7 0.7 1.0"/>
+      </material>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="0.05 0.5 1.2"/>
+      </geometry>
+      <origin xyz="0.6 -1.0 0.6" rpy="0 0 0"/>
+    </collision>
+  </link>
+  
+  <!-- Hanging obstacle -->
+  <link name="hanging_obstacle">
+    <visual>
+      <geometry>
+        <box size="0.3 0.3 0.1"/>
+      </geometry>
+      <origin xyz="0.7 0.2 1.3" rpy="0 0 0"/>
+      <material name="plastic">
+        <color rgba="1.0 0.5 0.0 1.0"/>
+      </material>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="0.3 0.3 0.1"/>
+      </geometry>
+      <origin xyz="0.7 0.2 1.3" rpy="0 0 0"/>
+    </collision>
+  </link>
+  
+  <!-- Ground plane -->
+  <link name="ground">
+    <visual>
+      <geometry>
+        <box size="4.0 4.0 0.02"/>
+      </geometry>
+      <origin xyz="0.0 0.0 0.0" rpy="0 0 0"/>
+      <material name="floor">
+        <color rgba="0.3 0.3 0.3 1.0"/>
+      </material>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="4.0 4.0 0.02"/>
+      </geometry>
+      <origin xyz="0.0 0.0 0.0" rpy="0 0 0"/>
+    </collision>
+  </link>
+  
+</robot>

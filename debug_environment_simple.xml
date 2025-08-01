@@ -1,0 +1,84 @@
+<?xml version="1.0"?>
+<!--
+Sample environment for STOMP debugging
+This creates a simple scene with a table and some obstacles
+-->
+<robot name="debug_environment">
+  
+  <!-- Table obstacle -->
+  <link name="table">
+    <visual>
+      <geometry>
+        <box size="0.8 1.2 0.04"/>
+      </geometry>
+      <origin xyz="0.5 0.0 0.4" rpy="0 0 0"/>
+      <material name="wood">
+        <color rgba="0.6 0.4 0.2 1.0"/>
+      </material>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="0.8 1.2 0.04"/>
+      </geometry>
+      <origin xyz="0.5 0.0 0.4" rpy="0 0 0"/>
+    </collision>
+  </link>
+  
+  <!-- Wall obstacle -->
+  <link name="wall">
+    <visual>
+      <geometry>
+        <box size="0.04 0.6 1.0"/>
+      </geometry>
+      <origin xyz="0.8 0.5 0.8" rpy="0 0 0"/>
+      <material name="concrete">
+        <color rgba="0.7 0.7 0.7 1.0"/>
+      </material>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="0.04 0.6 1.0"/>
+      </geometry>
+      <origin xyz="0.8 0.5 0.8" rpy="0 0 0"/>
+    </collision>
+  </link>
+  
+  <!-- Cylindrical obstacle -->
+  <link name="pillar">
+    <visual>
+      <geometry>
+        <cylinder radius="0.1" length="1.5"/>
+      </geometry>
+      <origin xyz="0.3 0.6 0.75" rpy="0 0 0"/>
+      <material name="metal">
+        <color rgba="0.5 0.5 0.8 1.0"/>
+      </material>
+    </visual>
+    <collision>
+      <geometry>
+        <cylinder radius="0.1" length="1.5"/>
+      </geometry>
+      <origin xyz="0.3 0.6 0.75" rpy="0 0 0"/>
+    </collision>
+  </link>
+  
+  <!-- Ground plane -->
+  <link name="ground">
+    <visual>
+      <geometry>
+        <box size="3.0 3.0 0.02"/>
+      </geometry>
+      <origin xyz="0.0 0.0 0.0" rpy="0 0 0"/>
+      <material name="floor">
+        <color rgba="0.3 0.3 0.3 1.0"/>
+      </material>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="3.0 3.0 0.02"/>
+      </geometry>
+      <origin xyz="0.0 0.0 0.0" rpy="0 0 0"/>
+    </collision>
+  </link>
+  
+</robot>
