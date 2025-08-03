@@ -315,12 +315,20 @@ void MotionGenerator::updateBestValidSolution(const std::vector<Eigen::MatrixXd>
         }
     }
 
-    if (bestIndex >= 0 && bestCost < convergenceState.bestValidCost) {
-        convergenceState.success = true;
-        convergenceState.bestValidCost = bestCost;
-        convergenceState.bestValidTheta = noisyTrajectories[bestIndex];
-        LOG_DEBUG << "New best valid solution found (cost: " << std::fixed << std::setprecision(4)
-                  << bestCost << ")";
+    // Always track the best noisy sample (as backup), but don't override weighted theta success
+    if (bestIndex >= 0 && bestCost < convergenceState.bestNoisyCost) {
+        convergenceState.noisySampleAvailable = true;
+        convergenceState.bestNoisyCost = bestCost;
+        convergenceState.bestNoisySample = noisyTrajectories[bestIndex];
+        LOG_DEBUG << "Updated best noisy sample (backup, cost: " << std::fixed << std::setprecision(4)
+                  << bestCost << ", valid samples: " << validSamples << ")";
+        
+        // Only use noisy sample as current solution if weighted theta is not available
+        if (!convergenceState.success) {
+            convergenceState.bestValidCost = bestCost;
+            convergenceState.bestValidTheta = noisyTrajectories[bestIndex];
+            LOG_DEBUG << "Using best noisy sample as current solution - no valid weighted theta";
+        }
     }
 }
 
@@ -340,29 +348,42 @@ void MotionGenerator::updateOptimizationState(const Eigen::MatrixXd &theta,
     if (trajectoryValid) {
         double thetaCost = _costCalculator->computeCost(theta, dt);
 
-        // Always use weighted theta if valid, regardless of cost comparison
-        // This ensures we get smooth trajectories instead of jaggedy noisy ones
+        // Track that weighted theta succeeded at least once
+        convergenceState.weightedThetaEverSucceeded = true;
+        
+        // Update best weighted theta if this one is better
+        if (thetaCost < convergenceState.bestWeightedCost) {
+            convergenceState.bestWeightedCost = thetaCost;
+            convergenceState.bestWeightedTheta = theta;
+        }
+
+        // Set current iteration state
         convergenceState.success = true;
         convergenceState.bestValidCost = thetaCost;
         convergenceState.bestValidTheta = theta;
-        LOG_DEBUG << "Using weighted-average theta (preferred for smoothness, cost: " << std::fixed
+        
+        LOG_DEBUG << "Using weighted-average theta (always preferred for smoothness, cost: " << std::fixed
                   << std::setprecision(4) << thetaCost << ")";
-    }
 
-    // Update convergence counters
-    double trajectoryCost = _costCalculator->computeCost(theta, dt);
-    double costDiff = std::abs(trajectoryCost - convergenceState.prevTrajectoryCost);
-    convergenceState.prevTrajectoryCost = trajectoryCost;
+        // Only update convergence counters when weighted theta is valid (base convergence on weighted theta only)
+        double costDiff = std::abs(thetaCost - convergenceState.prevTrajectoryCost);
+        convergenceState.prevTrajectoryCost = thetaCost;
 
-    if (trajectoryValid && config.enableEarlyStopping) {
-        convergenceState.earlyStoppingCounter++;
-    } else if (config.enableEarlyStopping) {
-        convergenceState.earlyStoppingCounter = 0;
-    }
+        if (config.enableEarlyStopping) {
+            convergenceState.earlyStoppingCounter++;
+        }
 
-    if (costDiff < STOMPConvergenceState::costConvergenceThreshold) {
-        convergenceState.noChangeCounter++;
+        if (costDiff < STOMPConvergenceState::costConvergenceThreshold) {
+            convergenceState.noChangeCounter++;
+        } else {
+            convergenceState.noChangeCounter = 0;
+        }
     } else {
+        // If weighted theta is invalid, reset convergence progress (only consider valid weighted theta for convergence)
+        convergenceState.success = false;
+        if (config.enableEarlyStopping) {
+            convergenceState.earlyStoppingCounter = 0;
+        }
         convergenceState.noChangeCounter = 0;
     }
 
@@ -414,20 +435,38 @@ bool MotionGenerator::performSTOMP(const StompConfig &config,
             auto noisyTrajectories = generateNoisySamples(config, theta, limits, bestSamples, pool);
             auto [costs, weights] = evaluateTrajectories(noisyTrajectories, config, dt, pool);
 
-            // Track best valid solution found in this iteration
-            updateBestValidSolution(noisyTrajectories, costs, convergenceState, iteration, N, dt);
-
             // Update trajectory using weighted samples
             updateBestSamples(noisyTrajectories, costs, bestSamples, config.numBestSamples);
             Eigen::MatrixXd previousTheta = theta;
             theta = applyTrajectoryUpdate(theta, noisyTrajectories, weights, config, N, limits);
 
-            // Update optimization state and check convergence
+            // FIRST: Update optimization state based on weighted theta (primary convergence mechanism)
             updateOptimizationState(theta, convergenceState, config, iteration, dt, previousTheta);
+
+            // ALWAYS track best noisy samples as backup (don't override weighted theta if it succeeded)
+            updateBestValidSolution(noisyTrajectories, costs, convergenceState, iteration, N, dt);
 
             if (checkConvergence(convergenceState, config, iteration)) {
                 break;
             }
+        }
+
+        // Final decision: use weighted theta if it ever succeeded, otherwise use best noisy sample
+        if (convergenceState.weightedThetaEverSucceeded) {
+            convergenceState.success = true;
+            convergenceState.bestValidCost = convergenceState.bestWeightedCost;
+            convergenceState.bestValidTheta = convergenceState.bestWeightedTheta;
+            LOG_INFO << "Final solution: weighted theta (cost: " << std::fixed << std::setprecision(4) 
+                     << convergenceState.bestWeightedCost << ")";
+        } else if (convergenceState.noisySampleAvailable) {
+            convergenceState.success = true;
+            convergenceState.bestValidCost = convergenceState.bestNoisyCost;
+            convergenceState.bestValidTheta = convergenceState.bestNoisySample;
+            LOG_INFO << "Final solution: best noisy sample fallback (cost: " << std::fixed << std::setprecision(4) 
+                     << convergenceState.bestNoisyCost << ") - weighted theta never succeeded";
+        } else {
+            convergenceState.success = false;
+            LOG_WARNING << "No valid solution found from either weighted theta or noisy samples";
         }
 
         bool result = false;
@@ -514,15 +553,21 @@ MotionGenerator::STOMPInitData MotionGenerator::initializeSTOMPExecution(
         estimatedTime = 2.0; // 2 second fallback trajectory
     }
 
-    initData.N = config.N;
-    initData.dt = estimatedTime / (initData.N - 1);
+    // Use fixed dt = 0.1 and calculate N from estimated trajectory duration (minimum 3 seconds / 30 points)
+    int calculatedN = static_cast<int>(std::ceil(estimatedTime / config.dt)) + 1;
+    initData.N = std::max(30, calculatedN);
+    initData.dt = config.dt;
     initData.theta = initializeTrajectory(goalVec, startVec, initData.N, config.numJoints);
     initializeMatrices(initData.N, initData.dt);
     initializeCostCalculator(config); // Moved here AFTER initializeMatrices
     initData.limits = _arm.jointLimits();
 
+    // Log trajectory parameters with minimum duration info
+    double actualDuration = (initData.N - 1) * initData.dt;
+    bool usedMinimum = (calculatedN < 30);
     LOG_DEBUG << "STOMP initialized: N=" << initData.N << ", dt=" << initData.dt
-              << "s, estimated_time=" << estimatedTime << "s";
+              << "s, estimated_time=" << estimatedTime << "s, actual_duration=" << actualDuration << "s"
+              << (usedMinimum ? " (minimum 3s constraint applied)" : " (estimated duration used)");
 
     return initData;
 }
@@ -1060,7 +1105,7 @@ double ObstacleCostCalculator::computeCost(const Eigen::MatrixXd &trajectory, do
     int N = trajectory.rows();
     int D = trajectory.cols();
 
-    const double clearanceRadius = 0.05;   // 2cm clearance requirement
+    const double clearanceRadius = 0.02;   // 2cm clearance requirement
     const double collisionPenalty = 1.; // Flat fee for actual collisions
     bool collides = false;
     // Early collision check: if any waypoint collides, return flat collision penalty immediately
@@ -1122,7 +1167,7 @@ double ObstacleCostCalculator::computeCost(const Eigen::MatrixXd &trajectory, do
         }
     }
 
-    return cost;
+    return cost / N;
 }
 
 ConstraintCostCalculator::ConstraintCostCalculator(const std::vector<double> &maxVel,
@@ -1200,7 +1245,7 @@ double ConstraintCostCalculator::computeCost(const Eigen::MatrixXd &trajectory, 
         }
     }
 
-    return cost;
+    return cost / N;
 }
 
 ControlCostCalculator::ControlCostCalculator(const Eigen::MatrixXd &R)

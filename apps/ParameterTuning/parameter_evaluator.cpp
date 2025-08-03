@@ -78,7 +78,7 @@ struct StompParameters
     double temperature = 15.0;
     double learningRate = 0.3;
     int maxIterations = 500;                                                // Increased from 100 to 500 for better convergence
-    int N = 75;                                                             // Number of trajectory points (replaces dt)
+    double trajectoryDuration = 7.5;                                       // Trajectory duration in seconds (N calculated from this)
     int numNoisyTrajectories = 32;                                          // Increased from 16 to 32 for more exploration
     int numBestSamples = 16;                                                // Increased from 8 to 16 for better selection
     double obstacleCostWeight = 1.0;                                        // Weight for obstacle avoidance cost
@@ -95,7 +95,7 @@ struct StompParameters
             params.temperature = stomp["temperature"].as<double>(15.0);
             params.learningRate = stomp["learning_rate"].as<double>(0.3);
             params.maxIterations = stomp["max_iterations"].as<int>(500);               // Increased default
-            params.N = stomp["N"].as<int>(75);                                         // Number of trajectory points
+            params.trajectoryDuration = stomp["trajectory_duration"].as<double>(7.5);  // Trajectory duration in seconds
             params.numNoisyTrajectories = stomp["num_noisy_trajectories"].as<int>(32); // Increased default
             params.numBestSamples = stomp["num_best_samples"].as<int>(16);             // Increased default
             params.obstacleCostWeight = stomp["obstacle_cost_weight"].as<double>(1.0);
@@ -355,7 +355,7 @@ EvaluationResult evaluateSTOMPTrajectories(const StompParameters &params,
         stompConfig.temperature = params.temperature;
         stompConfig.learningRate = params.learningRate;
         stompConfig.maxIterations = params.maxIterations;
-        stompConfig.N = params.N;
+        stompConfig.trajectoryDuration = params.trajectoryDuration;
         stompConfig.numNoisyTrajectories = params.numNoisyTrajectories;
         stompConfig.numBestSamples = params.numBestSamples;
         stompConfig.obstacleCostWeight = params.obstacleCostWeight;
@@ -736,7 +736,7 @@ int main(int argc, char *argv[])
         std::cout << "  Temperature: " << stompParams.temperature << std::endl;
         std::cout << "  Learning Rate: " << stompParams.learningRate << std::endl;
         std::cout << "  Max Iterations: " << stompParams.maxIterations << std::endl;
-        std::cout << "  N (trajectory points): " << stompParams.N << std::endl;
+        std::cout << "  Trajectory Duration: " << stompParams.trajectoryDuration << "s (N computed dynamically)" << std::endl;
         std::cout << "  Obstacle Cost Weight: " << stompParams.obstacleCostWeight << std::endl;
         std::cout << "  Constraint Cost Weight: " << stompParams.constraintCostWeight << std::endl;
         std::cout << "  Control Cost Weight: " << stompParams.controlCostWeight << std::endl;

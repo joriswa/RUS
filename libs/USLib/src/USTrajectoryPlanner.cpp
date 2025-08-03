@@ -99,15 +99,14 @@ bool UltrasoundScanTrajectoryPlanner::planTrajectories(bool useHauserForRepositi
         LOG_INFO << "Single pose request: planning direct movement trajectory";
 
         auto checkpointResult = _pathPlanner->planCheckpoints(_poses, _currentJoints);
-        auto &checkpoints = checkpointResult.checkpoints;
-        size_t firstValidIndex = checkpointResult.firstValidIndex;
+        auto &validArms = checkpointResult.validArms;
 
-        if (firstValidIndex >= checkpoints.size()) {
+        if (validArms.empty()) {
             throw std::runtime_error("No valid checkpoint found for single pose request.");
         }
 
         // Extract target arm configuration
-        RobotArm targetArm = checkpoints[firstValidIndex].first;
+        RobotArm targetArm = validArms[0];
 
         // Plan single trajectory from current position to target pose
         std::vector<std::pair<Eigen::VectorXd, Eigen::VectorXd>> singleRequest;
@@ -141,9 +140,9 @@ bool UltrasoundScanTrajectoryPlanner::planTrajectories(bool useHauserForRepositi
     }
 
     auto checkpointResult = _pathPlanner->planCheckpoints(_poses, _currentJoints);
-    auto &checkpoints = checkpointResult.checkpoints;
+    auto &validArms = checkpointResult.validArms;
     auto &validSegments = checkpointResult.validSegments;
-    size_t firstValidIndex = checkpointResult.firstValidIndex;
+    auto &validPoseIndices = checkpointResult.validPoseIndices;
 
     // Log the indices of the valid segments
     LOG_INFO << "Valid segments: " << validSegments.size();
@@ -151,28 +150,24 @@ bool UltrasoundScanTrajectoryPlanner::planTrajectories(bool useHauserForRepositi
         LOG_DEBUG << "Segment " << segment.first << "-" << segment.second;
     }
 
-    // Validate that we have a valid starting point
-    if (firstValidIndex >= checkpoints.size()) {
+    // Validate that we have valid poses to work with
+    if (validArms.empty()) {
         throw std::runtime_error("No valid checkpoint found to start trajectory planning.");
     }
-    if (firstValidIndex > 0) {
-        LOG_INFO << "Using first valid checkpoint: " << firstValidIndex;
-    }
+    
+    LOG_INFO << "Found " << validArms.size() << " valid poses out of " << checkpointResult.totalOriginalPoses << " total poses";
 
-    // Extract arm configurations
-    std::vector<RobotArm> arms;
-    for (const auto &[arm, valid] : checkpoints) {
-        arms.push_back(arm);
-    }
+    // Extract arm configurations - now we only have valid arms
+    std::vector<RobotArm> arms = validArms;
 
     // Build repositioning trajectory requests for batch planning
     std::vector<std::pair<Eigen::VectorXd, Eigen::VectorXd>> repositioningRequests;
     std::vector<std::string> repositioningDescriptions; // Track what each repositioning is for
 
     // Add initial repositioning trajectory (current joints -> first valid checkpoint)
-    repositioningRequests.emplace_back(_currentJoints, arms[firstValidIndex].getJointAngles());
-    repositioningDescriptions.emplace_back("Initial repositioning: current -> pose "
-                                           + std::to_string(firstValidIndex));
+    repositioningRequests.emplace_back(_currentJoints, arms[0].getJointAngles());
+    repositioningDescriptions.emplace_back("Initial repositioning: current -> valid pose 0 (original pose " 
+                                           + std::to_string(validPoseIndices[0]) + ")");
 
     // Add inter-segment repositioning trajectories
     for (size_t segIdx = 0; segIdx + 1 < validSegments.size(); segIdx++) {
@@ -181,9 +176,11 @@ bool UltrasoundScanTrajectoryPlanner::planTrajectories(bool useHauserForRepositi
 
         repositioningRequests.emplace_back(arms[currentEnd].getJointAngles(),
                                            arms[nextStart].getJointAngles());
-        repositioningDescriptions.emplace_back("Inter-segment repositioning: pose "
-                                               + std::to_string(currentEnd) + " -> pose "
-                                               + std::to_string(nextStart));
+        repositioningDescriptions.emplace_back("Inter-segment repositioning: valid pose " 
+                                               + std::to_string(currentEnd) + " -> valid pose "
+                                               + std::to_string(nextStart) + " (original poses "
+                                               + std::to_string(validPoseIndices[currentEnd]) + " -> "
+                                               + std::to_string(validPoseIndices[nextStart]) + ")");
     }
 
     LOG_INFO << "Planning " << repositioningRequests.size() << " repositioning trajectories using "
@@ -249,7 +246,8 @@ bool UltrasoundScanTrajectoryPlanner::planTrajectories(bool useHauserForRepositi
             singlePoint.push_back(point);
 
             _trajectories.emplace_back(singlePoint, true); // contact force = TRUE
-            LOG_DEBUG << "Contact force point at checkpoint " << start;
+            LOG_DEBUG << "Contact force point at valid checkpoint " << start 
+                      << " (original pose " << validPoseIndices[start] << ")";
         } else {
             // Multi-point segment - create contact force trajectory through all waypoints
             std::vector<Eigen::VectorXd> segmentWaypoints;
@@ -267,8 +265,10 @@ bool UltrasoundScanTrajectoryPlanner::planTrajectories(bool useHauserForRepositi
                 segmentWaypoints);
 
             _trajectories.emplace_back(trajectoryPoints, true); // contact force = TRUE
-            LOG_DEBUG << "Contact force trajectory: " << start << "-" << end << " ("
-                      << trajectoryPoints.size() << " points)";
+            
+            LOG_DEBUG << "Contact force trajectory: valid poses " << start << "-" << end 
+                      << " (original poses " << validPoseIndices[start] << "-" << validPoseIndices[end] << ") ("
+                      << trajectoryPoints.size() << " points, " << (end - start + 1) << " poses)";
         }
 
         // Add inter-segment repositioning if not the last segment
@@ -288,6 +288,7 @@ bool UltrasoundScanTrajectoryPlanner::planTrajectories(bool useHauserForRepositi
                 size_t currentEnd = validSegments[segIdx].second;
                 size_t nextStart = validSegments[segIdx + 1].first;
                 LOG_DEBUG << "Inter-segment repositioning " << currentEnd << "-" << nextStart
+                          << " (original poses " << validPoseIndices[currentEnd] << "-" << validPoseIndices[nextStart] << ")"
                           << ": " << trajectoryPoints.size() << " points";
             } else {
                 LOG_ERROR << "Inter-segment repositioning failed for segment " << segIdx;

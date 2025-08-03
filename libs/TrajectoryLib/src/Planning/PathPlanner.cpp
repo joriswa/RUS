@@ -1115,157 +1115,63 @@ PathPlanner::CheckpointPlanResult PathPlanner::planCheckpoints(
     const Eigen::VectorXd &currentJoints)
 {
     CheckpointPlanResult result;
+    result.totalOriginalPoses = originalScanPoses.size();
+    
     if (originalScanPoses.empty())
         return result;
 
-    std::vector<size_t> repositionIndices;
-    
-    // First pose - always use selectGoalPose
-    auto [firstArm, firstValid] = selectGoalPose(originalScanPoses[0]);
-    result.checkpoints.push_back({firstArm, firstValid});
-    if (firstValid) repositionIndices.push_back(0);
-
-    // Setup for remaining poses
-    std::array<double, 7> currentJointAngles;
-    for (int i = 0; i < 7; i++) {
-        currentJointAngles[i] = (i < currentJoints.size()) ? currentJoints[i] : firstArm.getJointAngles()[i];
-    }
-
-    const double MAX_JOINT_DISTANCE = M_PI;
-    const double MAX_SINGLE_JOINT = M_PI_2;
-    std::default_random_engine gen(static_cast<unsigned>(time(0)));
-    std::uniform_real_distribution<double> dis(-1.0, 1.0);
-
-    // Process remaining poses
-    for (size_t poseIdx = 1; poseIdx < originalScanPoses.size(); ++poseIdx) {
-        const auto &pose = originalScanPoses[poseIdx];
-        Eigen::Matrix<double, 4, 4> targetMatrix = pose.matrix() * _startArm.getEndeffectorTransform().inverse().matrix();
-
-        std::array<double, 7> bestSolution;
-        bool foundSolution = false;
-        double bestCost = std::numeric_limits<double>::infinity();
-
-        // Try IK to find a solution within joint limits
-        for (int attempt = 0; attempt < 100; ++attempt) {
-            double q7Value = currentJointAngles[6] + dis(gen) * 0.2;
-            
-            try {
-                std::array<double, 7> sol = franka_IK_EE_CC(targetMatrix, q7Value, currentJointAngles);
-                
-                if (std::any_of(sol.begin(), sol.end(), [](double v) { return std::isnan(v); })) continue;
-
-                // Check joint configuration changes
-                double totalDist = 0, maxDiff = 0;
-                bool validConfig = true;
-                for (int i = 0; i < 7; i++) {
-                    double diff = std::abs(sol[i] - currentJointAngles[i]);
-                    totalDist += diff * diff;
-                    maxDiff = std::max(maxDiff, diff);
-                    if (diff > MAX_SINGLE_JOINT) validConfig = false;
-                }
-                totalDist = std::sqrt(totalDist);
-                
-                if (!validConfig || totalDist > MAX_JOINT_DISTANCE) continue;
-
-                // Check collision
-                Eigen::Matrix<double, 7, 1> solEigen;
-                for (int i = 0; i < 7; i++) solEigen[i] = sol[i];
-                
-                RobotArm tempArm = _startArm;
-                tempArm.setJointAngles(solEigen);
-                if (armHasCollision(tempArm)) continue;
-
-                if (totalDist < bestCost) {
-                    bestCost = totalDist;
-                    bestSolution = sol;
-                    foundSolution = true;
-                    if (totalDist < 0.5) break; // Good enough
-                }
-            } catch (...) {
-                continue;
-            }
-        }
-
-        // Use repositioning if IK failed or no valid solution found
-        if (!foundSolution) {
-            auto [repoArm, repoValid] = selectGoalPose(pose);
-            if (repoValid && !armHasCollision(repoArm)) {
-                result.checkpoints.push_back({repoArm, true});
-                repositionIndices.push_back(poseIdx);
-                auto repoJoints = repoArm.getJointAngles();
-                for (int i = 0; i < 7; i++) currentJointAngles[i] = repoJoints[i];
-            } else {
-                // Invalid checkpoint
-                RobotArm invalidArm = _startArm;
-                Eigen::Matrix<double, 7, 1> currEigen;
-                for (int i = 0; i < 7; i++) currEigen[i] = currentJointAngles[i];
-                invalidArm.setJointAngles(currEigen);
-                result.checkpoints.push_back({invalidArm, false});
-            }
-        } else {
-            // Valid IK solution
-            RobotArm nextArm = _startArm;
-            Eigen::Matrix<double, 7, 1> bestEigen;
-            for (int i = 0; i < 7; i++) bestEigen[i] = bestSolution[i];
-            nextArm.setJointAngles(bestEigen);
-            result.checkpoints.push_back({nextArm, true});
-            for (int i = 0; i < 7; i++) currentJointAngles[i] = bestSolution[i];
+    // Step 1: Compute ALL poses using selectGoalPoseSimulatedAnnealing
+    for (size_t i = 0; i < originalScanPoses.size(); ++i) {
+        auto [arm, valid] = selectGoalPoseSimulatedAnnealing(originalScanPoses[i], 1.0, 0.01, 0.95, 1000, 100);
+        
+        // Only store valid poses
+        if (valid) {
+            result.validArms.push_back(arm);
+            result.validPoseIndices.push_back(i);
         }
     }
 
-    // Build segments - find invalid checkpoints and repositioning points as boundaries
-    std::vector<size_t> boundaries;
-    for (size_t i = 0; i < result.checkpoints.size(); ++i) {
-        if (!result.checkpoints[i].second) boundaries.push_back(i); // Invalid checkpoints
-    }
-    for (size_t idx : repositionIndices) {
-        if (idx > 0) boundaries.push_back(idx); // Repositioning points (except first)
-    }
+    // Step 2: Identify segment boundaries between subsequent valid poses where joint threshold > 5 degrees
+    std::vector<size_t> boundaries; // Indices in validArms array
+    const double threshold = 100. * M_PI / 180.; // 5 degrees in radians (5 * π / 180)
     
-    std::sort(boundaries.begin(), boundaries.end());
-    boundaries.erase(std::unique(boundaries.begin(), boundaries.end()), boundaries.end());
+    for (size_t i = 1; i < result.validArms.size(); ++i) {
+        auto joints1 = result.validArms[i-1].getJointAngles();
+        auto joints2 = result.validArms[i].getJointAngles();
+        
+        // Check if ANY single joint jumps more than 5 degrees
+        bool hasLargeJump = false;
+        for (int j = 0; j < 7; j++) {
+            if (std::abs(joints2[j] - joints1[j]) > threshold) {
+                hasLargeJump = true;
+                break;
+            }
+        }
+        
+        if (hasLargeJump) {
+            boundaries.push_back(i); // Index in the validArms array
+        }
+    }
 
-    // Create segments between boundaries
+    // Step 3: Create segments using indices into validArms array
     if (boundaries.empty()) {
-        // Single segment
-        size_t lastValid = result.checkpoints.size() - 1;
-        while (lastValid > 0 && !result.checkpoints[lastValid].second) lastValid--;
-        if (result.checkpoints[0].second && result.checkpoints[lastValid].second) {
-            result.validSegments.push_back({0, lastValid});
+        // Single segment for all valid poses
+        if (!result.validArms.empty()) {
+            result.validSegments.push_back({0, result.validArms.size() - 1});
         }
     } else {
         size_t start = 0;
+        
         for (size_t boundary : boundaries) {
             if (boundary > start) {
-                size_t end = boundary - 1;
-                while (end >= start && !result.checkpoints[end].second) {
-                    if (end == 0) break;
-                    end--;
-                }
-                if (end >= start && result.checkpoints[start].second && result.checkpoints[end].second) {
-                    result.validSegments.push_back({start, end});
-                }
+                result.validSegments.push_back({start, boundary - 1});
             }
-            start = result.checkpoints[boundary].second ? boundary : boundary + 1;
+            start = boundary;
         }
         
         // Final segment
-        if (start < result.checkpoints.size()) {
-            size_t end = result.checkpoints.size() - 1;
-            while (end >= start && !result.checkpoints[end].second) {
-                if (end == 0) break;
-                end--;
-            }
-            if (end >= start && result.checkpoints[start].second && result.checkpoints[end].second) {
-                result.validSegments.push_back({start, end});
-            }
-        }
-    }
-
-    for (size_t i = 0; i < result.checkpoints.size(); ++i) {
-        if (result.checkpoints[i].second) {
-            result.firstValidIndex = i;
-            break;
+        if (start < result.validArms.size()) {
+            result.validSegments.push_back({start, result.validArms.size() - 1});
         }
     }
 

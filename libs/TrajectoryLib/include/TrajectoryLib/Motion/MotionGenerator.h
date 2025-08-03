@@ -82,30 +82,31 @@ private:
  */
 struct StompConfig
 {
-    int numNoisyTrajectories    = 4;        ///< Number of noisy trajectory samples per iteration
-    int numBestSamples          = 4;         ///< Number of best samples to use for updates
-    int maxIterations           = 500;       ///< Maximum optimization iterations
-    int N                       = 50;        ///< Number of trajectory points
-    double dt                   = 0.1;       ///< Fixed time step for trajectory discretization
-    double learningRate         = 1.0;       ///< Learning rate for trajectory updates
-    double temperature          = .5;     ///< Temperature parameter for sample weighting
-    int numJoints               = 7;         ///< Number of robot joints
-    double outputFrequency      = 1000.0;    ///< Output frequency in Hz for quintic polynomial fitting
-    double obstacleCostWeight   = 100.37;     ///< Weight for obstacle cost
-    double constraintCostWeight = 10.50;     ///< Weight for constraint cost
-    double controlCostWeight    = 3.45e-06;  ///< Weight for control/smoothness cost
+    int numNoisyTrajectories    = 3;        ///< Number of noisy trajectory samples per iteration
+    int numBestSamples          = 10;       ///< Number of best samples to use for updates
+    int maxIterations           = 100;      ///< Maximum optimization iterations
+    double trajectoryDuration   = 9.3;      ///< Total trajectory duration in seconds (N calculated from this)
+    double dt                   = 0.1;      ///< Time step for trajectory discretization (tunable parameter)
+    double learningRate         = 1.0;      ///< Learning rate for trajectory updates
+    double temperature          = 3.478;    ///< Temperature parameter for sample weighting
+    int numJoints               = 7;        ///< Number of robot joints
+    double outputFrequency      = 1000.0;   ///< Output frequency in Hz for quintic polynomial fitting
+
+    double obstacleCostWeight   = 83.41;    ///< Weight for obstacle cost
+    double constraintCostWeight = 4.33;     ///< Weight for constraint cost
+    double controlCostWeight    = 8.11e-10; ///< Weight for control/smoothness cost
 
     Eigen::VectorXd jointStdDevs = (Eigen::VectorXd(7) << 
-        0.114,
-        0.141,
-        0.134,
-        0.173,
-        0.145,
-        0.016,
-        0.109
-    ).finished();                    ///< Standard deviations for noise per joint
+        0.081,  // joint 0
+        0.191,  // joint 1 (highest noise)
+        0.149,  // joint 2
+        0.124,  // joint 3
+        0.040,  // joint 4
+        0.040,  // joint 5
+        0.021   // joint 6 (lowest noise)
+    ).finished();                   ///< Standard deviations for noise per joint
 
-    bool enableEarlyStopping            = true; ///< Enable early stopping when collision-free trajectory found
+    bool enableEarlyStopping            = true;  ///< Enable early stopping when collision-free trajectory found
     int earlyStoppingPatience           = 10;    ///< Number of consecutive collision-free iterations before stopping
     double maxComputeTimeMs             = 0.0;   ///< Maximum computation time in milliseconds
     bool disableInternalParallelization = false; ///< Disable internal STOMP parallelization
@@ -308,7 +309,7 @@ public:
     bool performSTOMP(const StompConfig &config,
                       std::shared_ptr<boost::asio::thread_pool> sharedPool = nullptr,
                       int trajectoryIndex = -1,
-                      int maxRetries = 2);
+                      int maxRetries = 1);
 
     /**
      * @brief Get the optimized trajectory
@@ -441,6 +442,16 @@ private:
         int noChangeCounter = 0;
         int earlyStoppingCounter = 0;
         QElapsedTimer overallTimer;
+        
+        // Weighted theta tracking (primary solution)
+        bool weightedThetaEverSucceeded = false;
+        Eigen::MatrixXd bestWeightedTheta;
+        double bestWeightedCost = std::numeric_limits<double>::max();
+        
+        // Noisy sample tracking (backup solution)
+        bool noisySampleAvailable = false;
+        Eigen::MatrixXd bestNoisySample;
+        double bestNoisyCost = std::numeric_limits<double>::max();
         
         // Convergence parameters
         static constexpr double costConvergenceThreshold = 1.;

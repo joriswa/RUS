@@ -474,14 +474,14 @@ public:
      *
      * @param scanPoses A vector of Eigen::Affine3d poses representing the scan checkpoints
      * @param currentJoints Current joint configuration to start from
-     * @return A structure containing checkpoints, valid segments, and jump pairs
+     * @return A structure containing valid robot arms and clean segment information
      */
     struct CheckpointPlanResult
     {
-        std::vector<std::pair<RobotArm, bool>> checkpoints;
-        std::vector<std::pair<size_t, size_t>> validSegments;
-        std::vector<std::pair<size_t, size_t>> jumpPairs;
-        size_t firstValidIndex;
+        std::vector<RobotArm> validArms;                       // Only valid robot configurations
+        std::vector<size_t> validPoseIndices;                 // Original indices of valid poses
+        std::vector<std::pair<size_t, size_t>> validSegments; // Segments in validArms array
+        size_t totalOriginalPoses;                            // Total number of original poses
     };
 
     CheckpointPlanResult planCheckpoints(

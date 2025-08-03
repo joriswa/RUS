@@ -391,6 +391,7 @@ void RobotManager::parseURDF(const std::string &filename)
     ptree tree;
     read_xml(filename, tree);
 
+    _robotots.clear();
     std::shared_ptr<Robot> collisionRobot = nullptr;
 
     for (const auto &robot_node : tree) {

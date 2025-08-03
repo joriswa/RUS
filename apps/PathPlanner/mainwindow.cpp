@@ -785,13 +785,10 @@ std::vector<Eigen::Matrix4d> MainWindow::readPosesFromCSV(const std::string &fil
         Eigen::Quaterniond q(values[3], values[4], values[5], values[6]);
         q.normalize();
 
+        // Build the transform without local offset
         Eigen::Matrix4d T = Eigen::Matrix4d::Identity();
-        T.block<3, 3>(0, 0) = q.toRotationMatrix();
-
-        T.block<3, 1>(0, 3) = Eigen::Vector3d(x, y, z);
-
-        const Eigen::Vector3d local_move(0.0, 0.0, 0.0);
-        T.block<3, 1>(0, 3) += T.block<3, 3>(0, 0) * local_move;
+        T.block<3,3>(0,0) = q.toRotationMatrix();
+        T.block<3,1>(0,3) = Eigen::Vector3d(x, y, z);
 
         poses.push_back(T);
     }
