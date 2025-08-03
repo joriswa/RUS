@@ -1,18 +1,18 @@
 csv_file: "/Users/joris/Uni/MA/Code/PathPlanner_US_wip/apps/ParameterTuning/Data/Ext_Ant_Scan/scan_pose_list_ee.csv"
 obstacles_file: "/Users/joris/Uni/MA/Code/PathPlanner_US_wip/apps/ParameterTuning/Data/Ext_Ant_Scan/obstacles.xml"
-urdf_file: "/Users/joris/Uni/MA/Code/PathPlanner_US_wip/res/scenario_1/panda_US.urdf"
+urdf_file: "/Users/joris/Uni/MA/robot_definition/panda_US.urdf"
 output_file: "test_ext_ant_results.json"
 
 stomp:
-  temperature: 15.0
-  learning_rate: 0.3
-  max_iterations: 100
-  N: 75
+  temperature: .5
+  learning_rate: 1.
+  max_iterations: 300
+  N: 60
   num_noisy_trajectories: 6
   num_best_samples: 6
-  obstacle_cost_weight: 2.0
+  obstacle_cost_weight: 20.0
   constraint_cost_weight: 1.0
-  control_cost_weight: 0.1
+  control_cost_weight: 0.00000001
 
 evaluation:
-  trajectory_pairs: 3
+  trajectory_pairs: 10

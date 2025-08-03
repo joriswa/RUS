@@ -19,6 +19,9 @@
 #include <random>
 #include <unsupported/Eigen/Splines>
 #include <vector>
+#include <mutex>
+#include <atomic>
+#include <memory>
 
 /**
  * @brief Exception thrown when STOMP optimization times out
@@ -79,26 +82,33 @@ private:
  */
 struct StompConfig
 {
-    int numNoisyTrajectories = 30;       ///< Number of noisy trajectory samples per iteration (increased for better exploration)
-    int numBestSamples = 30;              ///< Number of best samples to use for updates
-    int maxIterations = 200;             ///< Maximum optimization iterations (reduced from 1000 for better performance)
-    int N = 60;                          ///< Number of trajectory points (fixed at 75 for consistent optimization)
-    double dt = 0.1;                     ///< Fixed time step for trajectory discretization (will be adjusted based on trajectory duration)
-    double learningRate = 1.;          ///< Learning rate for trajectory updates (slightly reduced for stability)
-    double temperature = .5;           ///< Temperature parameter for sample weighting (simplified from Optuna value)
-    int numJoints = 7;                   ///< Number of robot joints
-    double outputFrequency = 1000.0;     ///< Output frequency in Hz for quintic polynomial fitting
-    double obstacleCostWeight = 2.0;     ///< Weight for obstacle cost (increased due to normalized cost structure)
-    double constraintCostWeight = 1.0;   ///< Weight for constraint cost (reduced due to normalized cost structure)
-    double controlCostWeight = .000000001;      ///< Weight for control/smoothness cost from original STOMP paper
+    int numNoisyTrajectories    = 4;        ///< Number of noisy trajectory samples per iteration
+    int numBestSamples          = 4;         ///< Number of best samples to use for updates
+    int maxIterations           = 500;       ///< Maximum optimization iterations
+    int N                       = 50;        ///< Number of trajectory points
+    double dt                   = 0.1;       ///< Fixed time step for trajectory discretization
+    double learningRate         = 1.0;       ///< Learning rate for trajectory updates
+    double temperature          = .5;     ///< Temperature parameter for sample weighting
+    int numJoints               = 7;         ///< Number of robot joints
+    double outputFrequency      = 1000.0;    ///< Output frequency in Hz for quintic polynomial fitting
+    double obstacleCostWeight   = 100.37;     ///< Weight for obstacle cost
+    double constraintCostWeight = 10.50;     ///< Weight for constraint cost
+    double controlCostWeight    = 3.45e-06;  ///< Weight for control/smoothness cost
 
-    Eigen::VectorXd jointStdDevs         ///< Standard deviations for noise per joint (balanced for exploration)
-        =  0.5 * (Eigen::VectorXd(7) << 0.08, 0.12, 0.08, 0.05, 0.04, 0.10, 0.04).finished();
+    Eigen::VectorXd jointStdDevs = (Eigen::VectorXd(7) << 
+        0.114,
+        0.141,
+        0.134,
+        0.173,
+        0.145,
+        0.016,
+        0.109
+    ).finished();                    ///< Standard deviations for noise per joint
 
-    bool enableEarlyStopping = true;       ///< Enable early stopping when collision-free trajectory found
-    int earlyStoppingPatience = 15;       ///< Number of consecutive collision-free iterations before stopping (increased for better solutions)
-    double maxComputeTimeMs = 0.0;    ///< Maximum computation time in milliseconds (10 seconds reasonable limit)
-    bool disableInternalParallelization = false; ///< Disable internal STOMP parallelization for batch mode optimization
+    bool enableEarlyStopping            = true; ///< Enable early stopping when collision-free trajectory found
+    int earlyStoppingPatience           = 10;    ///< Number of consecutive collision-free iterations before stopping
+    double maxComputeTimeMs             = 0.0;   ///< Maximum computation time in milliseconds
+    bool disableInternalParallelization = false; ///< Disable internal STOMP parallelization
 };
 
 /**
@@ -121,16 +131,16 @@ public:
 };
 
 /**
- * @brief Cost calculator for obstacle avoidance using SDF with improved robot representation and robustness
+ * @brief Cost calculator for obstacle avoidance using original STOMP paper approach with collision checking
  * 
  * Computes trajectory costs based on proximity to obstacles using signed distance field
- * with multiple sample points on robot link bounding boxes for better accuracy.
- * Features enhanced cost calculation with:
- * - Normalized violation costs (violation/clearance ratio)
- * - Averaged costs per link and timestep to prevent sample point explosion
- * - Cost capping to prevent runaway accumulation
- * - Length normalization for trajectory-independent scaling
- * - Reduced collision penalties for more balanced cost weighting
+ * with sphere representation of robot links and velocity scaling as in the original STOMP paper.
+ * Features:
+ * - Each robot link represented by a sphere at bounding box center
+ * - Sphere position scaled by link velocity for motion prediction
+ * - Simple quadratic cost function for clearance violations
+ * - Actual collision detection with flat penalty for any box intersection
+ * - Combines distance-based smooth costs with discrete collision penalties
  */
 class ObstacleCostCalculator : public CostCalculator
 {
@@ -288,15 +298,17 @@ public:
     void performHauser(unsigned int maxIterations, const std::string &out = "", unsigned int outputFrequency = 100);
     
     /**
-     * @brief Perform trajectory optimization using STOMP algorithm
+     * @brief Perform trajectory optimization using STOMP algorithm with automatic restart on failure
      * @param config STOMP configuration parameters
      * @param sharedPool Optional shared thread pool for parallelization
      * @param trajectoryIndex Optional trajectory index for logging
-     * @return True if collision-free trajectory found
+     * @param maxRetries Maximum number of restart attempts on failure (default: 1, set to 0 to disable)
+     * @return True if collision-free trajectory found (including after restart)
      */
     bool performSTOMP(const StompConfig &config,
                       std::shared_ptr<boost::asio::thread_pool> sharedPool = nullptr,
-                      int trajectoryIndex = -1);
+                      int trajectoryIndex = -1,
+                      int maxRetries = 2);
 
     /**
      * @brief Get the optimized trajectory
@@ -431,7 +443,7 @@ private:
         QElapsedTimer overallTimer;
         
         // Convergence parameters
-        static constexpr double costConvergenceThreshold = 1e-6;
+        static constexpr double costConvergenceThreshold = 1.;
         static constexpr int convergencePatience = 3;
         
         STOMPConvergenceState() {

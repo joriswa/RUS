@@ -59,6 +59,7 @@ struct Params
     double goalBiasProbability = 0.5;
     bool customCost = false;
     int maxIterations = 5000;
+    int maxRestarts = 3; // Number of restarts for RRT Connect
 };
 
 /**
@@ -148,6 +149,12 @@ private:
     bool performRRTConnect();
 
     /**
+     * @brief Performs a single attempt of RRT-Connect algorithm (used internally by performRRTConnect).
+     * @return True if a path was found, false otherwise.
+     */
+    bool performRRTConnectSingle();
+
+    /**
      * @brief Performs the RRT* algorithm with asymptotic optimality guarantees.
      * @param costTrackingFile Optional file path to save cost tracking data.
      * @return True if a path was found, false otherwise.
@@ -191,6 +198,12 @@ private:
      * @return A vector of nodes that were rewired.
      */
     std::vector<NodePtr> rewirePath(NodePtr newNode, std::vector<NodePtr> &neighboringNodes);
+
+    /**
+     * @brief Resets tree state for a fresh restart attempt.
+     * Creates a new _pathRoot from _startArm and clears/reinitializes _tree.
+     */
+    void resetTreeState();
 
     /**
      * @brief Checks if an arm configuration is sufficiently close to the goal.
@@ -437,6 +450,13 @@ public:
      * @return True if a valid path was found, false otherwise.
      */
     bool runPathFinding();
+
+    /**
+     * @brief Executes the configured path planning algorithm with retry capability.
+     * @param maxRetries Maximum number of retry attempts (default: 2)
+     * @return True if a valid path was found, false otherwise.
+     */
+    bool runPathFinding(int maxRetries);
 
     /**
      * @brief Sets a specific goal configuration instead of pose-based planning.

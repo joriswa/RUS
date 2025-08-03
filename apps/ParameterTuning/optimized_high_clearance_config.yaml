@@ -1,0 +1,30 @@
+csv_file: /Users/joris/Uni/MA/Code/PathPlanner_US_wip/apps/ParameterTuning/Data/Ext_Ant_Scan/scan_pose_list_ee.csv
+obstacles_file: /Users/joris/Uni/MA/Code/PathPlanner_US_wip/apps/ParameterTuning/Data/Ext_Ant_Scan/obstacles.xml
+urdf_file: /Users/joris/Uni/MA/robot_definition/panda_US.urdf
+output_file: high_clearance_optimized_results.json
+stomp:
+  temperature: 3.3081421865726672
+  learning_rate: 1.0
+  max_iterations: 212
+  N: 41
+  num_noisy_trajectories: 9
+  num_best_samples: 8
+  obstacle_cost_weight: 63.71944136532858
+  constraint_cost_weight: 12.495520468798103
+  control_cost_weight: 2.671390178713559e-10
+  joint_std_devs:
+  - 0.016829032021380995
+  - 0.09846362344516743
+  - 0.11310248059443956
+  - 0.13111168128465925
+  - 0.19727358628101413
+  - 0.055990501587185076
+  - 0.13770575400711693
+evaluation:
+  trajectory_pairs: 20
+'# Description': High-Clearance Applications (Maximum Safety)
+'# Performance':
+  success_rate: '0.9900'
+  planning_time_ms: '705.3'
+  path_length: '3.3479'
+  clearance_m: '0.2272'

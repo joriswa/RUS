@@ -1,0 +1,23 @@
+# Test configuration to verify NaN fix with zero movement cases
+csv_file: "/Users/joris/Uni/MA/Code/PathPlanner_US_wip/apps/ParameterTuning/Data/Ext_Ant_Scan/scan_pose_list_ee.csv"
+obstacles_file: "/Users/joris/Uni/MA/Code/PathPlanner_US_wip/apps/ParameterTuning/Data/Ext_Ant_Scan/obstacles.xml"
+urdf_file: "/Users/joris/Uni/MA/Code/PathPlanner_US_wip/res/scenario_1/panda_US.urdf"
+output_file: "nan_fix_test_results.json"
+
+stomp:
+  temperature: 10.0
+  learning_rate: 0.1
+  max_iterations: 10  # Small number for quick test
+  N: 25  # Smaller N for quick test
+  num_noisy_trajectories: 4
+  num_best_samples: 2
+  obstacle_cost_weight: 1.0
+  constraint_cost_weight: 1.0
+  joint_std_devs: [0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05]
+
+evaluation:
+  trajectory_pairs: 2  # Very small number for quick test
+  
+# Test with identical start/end poses to trigger zero movement case
+debug_mode: true
+force_identical_poses: true

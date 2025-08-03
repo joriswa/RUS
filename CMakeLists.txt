@@ -43,13 +43,12 @@ add_subdirectory(libs/USLib)
 
 # Add applications
 add_subdirectory(apps/PathPlanner)
-add_subdirectory(apps/ParallelizationBenchmark)
+# add_subdirectory(apps/ParallelizationBenchmark)
+add_subdirectory(apps/ParameterTuning)
 # add_subdirectory(apps/ComparisonIK)
 # add_subdirectory(apps/ComparisonSTOMPHauser)
 # add_subdirectory(apps/UltrasoundRepositioningEvaluator)
 # add_subdirectory(apps/TrajectoryPlanningEvaluator)
-add_subdirectory(apps/ParameterTuning)
-add_subdirectory(apps/StompDebugger)
 
 # Install configuration
 include(GNUInstallDirs)

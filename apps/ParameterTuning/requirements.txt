@@ -1,7 +1,7 @@
-# Python dependencies for STOMP Parameter Tuner
-optuna>=3.0.0
-plotly>=5.0.0
-kaleido>=0.2.1
-plotly==5.17.0
-pyyaml>=6.0
-numpy>=1.21.0
+# Basic requirements for ParameterTuning
+# No external dependencies needed for run_evaluator.py - it uses only stdlib
+
+# Future Optuna optimization (when we get there):
+# optuna>=3.0.0
+# plotly>=5.0.0  # for visualization
+# pandas>=1.0.0  # for data analysis

@@ -1,0 +1,19 @@
+# Python virtual environment
+venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Temporary files from evaluator
+temp_config_*.yaml
+temp_results_*.json
+
+# Build artifacts
+*.o
+*.so
+parameter_evaluator
+
+# IDE files
+.vscode/
+*.swp
+*.swo

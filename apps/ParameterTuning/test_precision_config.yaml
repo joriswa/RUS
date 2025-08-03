@@ -1,0 +1,12 @@
+
+algorithm: stomp
+temperature: 2.5
+max_iterations: 100
+N: 50
+num_noisy_trajectories: 5
+num_best_samples: 3
+obstacle_cost_weight: 10.0
+constraint_cost_weight: 5.0
+control_cost_weight: 0.001
+output_file: test_precision.json
+

@@ -141,6 +141,14 @@ public:
         const std::vector<std::string>& descriptions,
         bool enableShortcutting = true);
 
+    /**
+     * @brief Optimize waypoints by detecting and connecting small movement sequences with time-optimal segments
+     * @param waypoints Original waypoint vector where each element is a joint configuration
+     * @param movementThreshold Maximum joint movement (radians) to consider as "small movement"
+     * @return Optimized waypoint vector with small movement sequences replaced by direct connections
+     */
+    std::vector<Eigen::VectorXd> optimizeSmallMovements(const std::vector<Eigen::VectorXd> &waypoints, double movementThreshold = 0.05);
+
 private:
     Eigen::VectorXd _currentJoints;
     std::string _environment;
