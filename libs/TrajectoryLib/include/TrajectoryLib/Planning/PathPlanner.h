@@ -59,6 +59,7 @@ struct Params
     double goalBiasProbability = 0.5;
     bool customCost = false;
     int maxIterations = 5000;
+    int maxRestarts = 3; // Number of restarts for RRT Connect
 };
 
 /**
@@ -148,6 +149,12 @@ private:
     bool performRRTConnect();
 
     /**
+     * @brief Performs a single attempt of RRT-Connect algorithm (used internally by performRRTConnect).
+     * @return True if a path was found, false otherwise.
+     */
+    bool performRRTConnectSingle();
+
+    /**
      * @brief Performs the RRT* algorithm with asymptotic optimality guarantees.
      * @param costTrackingFile Optional file path to save cost tracking data.
      * @return True if a path was found, false otherwise.
@@ -191,6 +198,12 @@ private:
      * @return A vector of nodes that were rewired.
      */
     std::vector<NodePtr> rewirePath(NodePtr newNode, std::vector<NodePtr> &neighboringNodes);
+
+    /**
+     * @brief Resets tree state for a fresh restart attempt.
+     * Creates a new _pathRoot from _startArm and clears/reinitializes _tree.
+     */
+    void resetTreeState();
 
     /**
      * @brief Checks if an arm configuration is sufficiently close to the goal.
@@ -439,6 +452,13 @@ public:
     bool runPathFinding();
 
     /**
+     * @brief Executes the configured path planning algorithm with retry capability.
+     * @param maxRetries Maximum number of retry attempts (default: 2)
+     * @return True if a valid path was found, false otherwise.
+     */
+    bool runPathFinding(int maxRetries);
+
+    /**
      * @brief Sets a specific goal configuration instead of pose-based planning.
      * @param arm The target robot arm configuration.
      */
@@ -454,14 +474,14 @@ public:
      *
      * @param scanPoses A vector of Eigen::Affine3d poses representing the scan checkpoints
      * @param currentJoints Current joint configuration to start from
-     * @return A structure containing checkpoints, valid segments, and jump pairs
+     * @return A structure containing valid robot arms and clean segment information
      */
     struct CheckpointPlanResult
     {
-        std::vector<std::pair<RobotArm, bool>> checkpoints;
-        std::vector<std::pair<size_t, size_t>> validSegments;
-        std::vector<std::pair<size_t, size_t>> jumpPairs;
-        size_t firstValidIndex;
+        std::vector<RobotArm> validArms;                       // Only valid robot configurations
+        std::vector<size_t> validPoseIndices;                 // Original indices of valid poses
+        std::vector<std::pair<size_t, size_t>> validSegments; // Segments in validArms array
+        size_t totalOriginalPoses;                            // Total number of original poses
     };
 
     CheckpointPlanResult planCheckpoints(

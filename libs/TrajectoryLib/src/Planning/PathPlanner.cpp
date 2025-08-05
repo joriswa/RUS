@@ -1,9 +1,11 @@
 #include "TrajectoryLib/Planning/PathPlanner.h"
 #include "TrajectoryLib/Robot/franka_ik_He.h"
+#include "TrajectoryLib/Logger.h"
 #include <iostream>
 #include <thread>
 #include <mutex>
 #include <future>
+#include <chrono>
 
 PathPlanner::PathPlanner() {}
 
@@ -203,12 +205,9 @@ bool PathPlanner::performRRT()
 
 void PathPlanner::setStartPose(RobotArm arm)
 {
-    // Debug: Check if the robot arm is properly initialized
     auto joints = arm.getJointAngles();
-    std::cout << "DEBUG setStartPose: incoming arm joint count = " << joints.size() << std::endl;
     
     if (joints.size() == 0) {
-        std::cout << "ERROR setStartPose: RobotArm has no joints!" << std::endl;
         throw std::runtime_error("RobotArm has no joints in setStartPose");
     }
     
@@ -216,10 +215,6 @@ void PathPlanner::setStartPose(RobotArm arm)
     _pathRoot = std::make_shared<PathNode>(_startPoint, arm);
     _startArm = arm;
     _tree.insert(std::make_pair(_pathRoot->_state, _pathRoot));
-    
-    // Debug: Verify what was set
-    std::cout << "DEBUG setStartPose: _startArm joints = [" 
-              << _startArm.getJointAngles().transpose() << "]" << std::endl;
 }
 
 void PathPlanner::setGoalPose(Eigen::Vector3d t, Eigen::Matrix3d r)
@@ -231,21 +226,14 @@ void PathPlanner::setGoalPose(Eigen::Vector3d t, Eigen::Matrix3d r)
 
 void PathPlanner::setGoalConfiguration(RobotArm arm)
 {
-    // Debug: Check if the robot arm is properly initialized
     auto joints = arm.getJointAngles();
-    std::cout << "DEBUG setGoalConfiguration: incoming arm joint count = " << joints.size() << std::endl;
     
     if (joints.size() == 0) {
-        std::cout << "ERROR setGoalConfiguration: RobotArm has no joints!" << std::endl;
         throw std::runtime_error("RobotArm has no joints in setGoalConfiguration");
     }
     
     _goalConfigSpecified = true;
     _goalArm = arm;
-    
-    // Debug: Verify what was set
-    std::cout << "DEBUG setGoalConfiguration: _goalArm joints = [" 
-              << _goalArm.getJointAngles().transpose() << "]" << std::endl;
 }
 
 void PathPlanner::setObstacleTree(const std::shared_ptr<BVHTree> &newObstacleTree)
@@ -386,31 +374,62 @@ bool PathPlanner::closeToGoal(RobotArm arm)
 
 bool PathPlanner::runPathFinding()
 {
-    if (!_goalConfigSpecified) {
-        Eigen::Affine3d goalTrafo;
-        goalTrafo.linear() = _goalRotation;
-        goalTrafo.translation() = _goalTranslation;
-        _goalArm = selectGoalPose(goalTrafo).first;
-    }
+    return runPathFinding(_params.maxRestarts + 1); // Use configured maxRestarts + 1 initial attempt
+}
 
-    _path.clear();
-    bool res = false;
-    switch (_params.algo) {
-    case RRT:
-        res = performRRT();
-        break;
-    case RRTStar:
-        res = performRRTStar();
-        break;
-    case InformedRRTStar:
-        res = performInformedRRTStar();
-        break;
-    case RRTConnect:
-        res = performRRTConnect();
-        break;
-    }
+bool PathPlanner::runPathFinding(int maxRetries)
+{
+    for (int attempt = 0; attempt < maxRetries; ++attempt) {
+        try {
+            // Setup goal configuration if not specified
+            if (!_goalConfigSpecified) {
+                Eigen::Affine3d goalTrafo;
+                goalTrafo.linear() = _goalRotation;
+                goalTrafo.translation() = _goalTranslation;
+                _goalArm = selectGoalPose(goalTrafo).first;
+            }
 
-    return res;
+            _path.clear();
+            bool res = false;
+            
+            LOG_DEBUG << "PathPlanner attempt " << (attempt + 1) << " of " << maxRetries;
+            
+            switch (_params.algo) {
+            case RRT:
+                res = performRRT();
+                break;
+            case RRTStar:
+                res = performRRTStar();
+                break;
+            case InformedRRTStar:
+                res = performInformedRRTStar();
+                break;
+            case RRTConnect:
+                res = performRRTConnect();
+                break;
+            }
+
+            if (res) {
+                if (attempt > 0) {
+                    LOG_INFO << "PathPlanner succeeded on attempt " << (attempt + 1) << " of " << maxRetries;
+                }
+                return true;
+            } else {
+                LOG_DEBUG << "PathPlanner attempt " << (attempt + 1) << " failed - no path found";
+            }
+            
+        } catch (const std::exception& e) {
+            LOG_WARNING << "PathPlanner attempt " << (attempt + 1) << " failed with exception: " << e.what();
+        }
+        
+        // If we have more attempts remaining, wait a bit before retrying
+        if (attempt < maxRetries - 1) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+    }
+    
+    LOG_ERROR << "PathPlanner failed after " << maxRetries << " attempts";
+    return false;
 }
 
 double PathPlanner::metric(const State &a, const State &b)
@@ -573,7 +592,8 @@ void PathPlanner::constructPath(NodePtr startNode, NodePtr goalNode)
     _path = startPath;
 
     if (!goalPath.empty()) {
-        _path.insert(_path.end(), goalPath.begin() + 1, goalPath.end());
+        // Include the complete goalPath - both connection points are needed
+        _path.insert(_path.end(), goalPath.begin(), goalPath.end());
     }
 }
 
@@ -638,6 +658,12 @@ bool PathPlanner::extendTree(bgi::rtree<std::pair<State, NodePtr>, bgi::rstar<16
 
 bool PathPlanner::performRRTConnect()
 {
+    // Single RRT Connect attempt - retries are handled at runPathFinding level
+    return performRRTConnectSingle();
+}
+
+bool PathPlanner::performRRTConnectSingle()
+{
     bgi::rtree<std::pair<State, NodePtr>, bgi::rstar<16>> startTree;
     bgi::rtree<std::pair<State, NodePtr>, bgi::rstar<16>> goalTree;
     _path.clear();
@@ -680,7 +706,64 @@ bool PathPlanner::performRRTConnect()
             if (motionIsValid(newNode->_arm, nearestOther->_arm, true)) {
                 constructPath(isStartTree ? newNode : nearestOther,
                               isStartTree ? nearestOther : newNode);
-                return true;
+                
+                // Validate that the constructed path actually reaches start and goal
+                if (!_path.empty()) {
+                    auto [firstState, firstArm] = _path.front();
+                    auto [lastState, lastArm] = _path.back();
+                    
+                    const double tolerance = 0.2; // Joint space tolerance (increased from 0.1 for debugging)
+                    bool startMatches = true;
+                    bool goalMatches = true;
+                    
+                    // Check each joint individually for start configuration
+                    auto startJoints = _startArm.getJointState();
+                    double maxStartDev = 0.0;
+                    for (int joint = 0; joint < 7; ++joint) {
+                        double dev = 0.0;
+                        switch(joint) {
+                            case 0: dev = std::abs(bg::get<0>(firstState) - bg::get<0>(startJoints)); break;
+                            case 1: dev = std::abs(bg::get<1>(firstState) - bg::get<1>(startJoints)); break;
+                            case 2: dev = std::abs(bg::get<2>(firstState) - bg::get<2>(startJoints)); break;
+                            case 3: dev = std::abs(bg::get<3>(firstState) - bg::get<3>(startJoints)); break;
+                            case 4: dev = std::abs(bg::get<4>(firstState) - bg::get<4>(startJoints)); break;
+                            case 5: dev = std::abs(bg::get<5>(firstState) - bg::get<5>(startJoints)); break;
+                            case 6: dev = std::abs(bg::get<6>(firstState) - bg::get<6>(startJoints)); break;
+                        }
+                        if (dev > maxStartDev) maxStartDev = dev;
+                        if (dev > tolerance) startMatches = false;
+                    }
+                    
+                    // Check each joint individually for goal configuration  
+                    auto goalJoints = _goalArm.getJointState();
+                    double maxGoalDev = 0.0;
+                    for (int joint = 0; joint < 7; ++joint) {
+                        double dev = 0.0;
+                        switch(joint) {
+                            case 0: dev = std::abs(bg::get<0>(lastState) - bg::get<0>(goalJoints)); break;
+                            case 1: dev = std::abs(bg::get<1>(lastState) - bg::get<1>(goalJoints)); break;
+                            case 2: dev = std::abs(bg::get<2>(lastState) - bg::get<2>(goalJoints)); break;
+                            case 3: dev = std::abs(bg::get<3>(lastState) - bg::get<3>(goalJoints)); break;
+                            case 4: dev = std::abs(bg::get<4>(lastState) - bg::get<4>(goalJoints)); break;
+                            case 5: dev = std::abs(bg::get<5>(lastState) - bg::get<5>(goalJoints)); break;
+                            case 6: dev = std::abs(bg::get<6>(lastState) - bg::get<6>(goalJoints)); break;
+                        }
+                        if (dev > maxGoalDev) maxGoalDev = dev;
+                        if (dev > tolerance) goalMatches = false;
+                    }
+                    
+                    if (startMatches && goalMatches) {
+                        return true;
+                    } else {
+                        LOG_DEBUG << "RRT Connect: Path doesn't reach endpoints (start_match: " 
+                                  << startMatches << ", goal_match: " << goalMatches 
+                                  << ", max_start_dev: " << maxStartDev 
+                                  << ", max_goal_dev: " << maxGoalDev 
+                                  << ", tolerance: " << tolerance << ")";
+                        // Clear invalid path and continue searching
+                        _path.clear();
+                    }
+                }
             }
         }
 
@@ -1032,157 +1115,71 @@ PathPlanner::CheckpointPlanResult PathPlanner::planCheckpoints(
     const Eigen::VectorXd &currentJoints)
 {
     CheckpointPlanResult result;
+    result.totalOriginalPoses = originalScanPoses.size();
+    
     if (originalScanPoses.empty())
         return result;
 
-    std::vector<size_t> repositionIndices;
-    
-    // First pose - always use selectGoalPose
-    auto [firstArm, firstValid] = selectGoalPose(originalScanPoses[0]);
-    result.checkpoints.push_back({firstArm, firstValid});
-    if (firstValid) repositionIndices.push_back(0);
-
-    // Setup for remaining poses
-    std::array<double, 7> currentJointAngles;
-    for (int i = 0; i < 7; i++) {
-        currentJointAngles[i] = (i < currentJoints.size()) ? currentJoints[i] : firstArm.getJointAngles()[i];
-    }
-
-    const double MAX_JOINT_DISTANCE = M_PI_2;
-    const double MAX_SINGLE_JOINT = M_PI_4;
-    std::default_random_engine gen(static_cast<unsigned>(time(0)));
-    std::uniform_real_distribution<double> dis(-1.0, 1.0);
-
-    // Process remaining poses
-    for (size_t poseIdx = 1; poseIdx < originalScanPoses.size(); ++poseIdx) {
-        const auto &pose = originalScanPoses[poseIdx];
-        Eigen::Matrix<double, 4, 4> targetMatrix = pose.matrix() * _startArm.getEndeffectorTransform().inverse().matrix();
-
-        std::array<double, 7> bestSolution;
-        bool foundSolution = false;
-        double bestCost = std::numeric_limits<double>::infinity();
-
-        // Try IK to find a solution within joint limits
-        for (int attempt = 0; attempt < 100; ++attempt) {
-            double q7Value = currentJointAngles[6] + dis(gen) * 0.2;
-            
-            try {
-                std::array<double, 7> sol = franka_IK_EE_CC(targetMatrix, q7Value, currentJointAngles);
-                
-                if (std::any_of(sol.begin(), sol.end(), [](double v) { return std::isnan(v); })) continue;
-
-                // Check joint configuration changes
-                double totalDist = 0, maxDiff = 0;
-                bool validConfig = true;
-                for (int i = 0; i < 7; i++) {
-                    double diff = std::abs(sol[i] - currentJointAngles[i]);
-                    totalDist += diff * diff;
-                    maxDiff = std::max(maxDiff, diff);
-                    if (diff > MAX_SINGLE_JOINT) validConfig = false;
-                }
-                totalDist = std::sqrt(totalDist);
-                
-                if (!validConfig || totalDist > MAX_JOINT_DISTANCE) continue;
-
-                // Check collision
-                Eigen::Matrix<double, 7, 1> solEigen;
-                for (int i = 0; i < 7; i++) solEigen[i] = sol[i];
-                
-                RobotArm tempArm = _startArm;
-                tempArm.setJointAngles(solEigen);
-                if (armHasCollision(tempArm)) continue;
-
-                if (totalDist < bestCost) {
-                    bestCost = totalDist;
-                    bestSolution = sol;
-                    foundSolution = true;
-                    if (totalDist < 0.5) break; // Good enough
-                }
-            } catch (...) {
-                continue;
-            }
-        }
-
-        // Use repositioning if IK failed or no valid solution found
-        if (!foundSolution) {
-            auto [repoArm, repoValid] = selectGoalPose(pose);
-            if (repoValid && !armHasCollision(repoArm)) {
-                result.checkpoints.push_back({repoArm, true});
-                repositionIndices.push_back(poseIdx);
-                auto repoJoints = repoArm.getJointAngles();
-                for (int i = 0; i < 7; i++) currentJointAngles[i] = repoJoints[i];
-            } else {
-                // Invalid checkpoint
-                RobotArm invalidArm = _startArm;
-                Eigen::Matrix<double, 7, 1> currEigen;
-                for (int i = 0; i < 7; i++) currEigen[i] = currentJointAngles[i];
-                invalidArm.setJointAngles(currEigen);
-                result.checkpoints.push_back({invalidArm, false});
-            }
-        } else {
-            // Valid IK solution
-            RobotArm nextArm = _startArm;
-            Eigen::Matrix<double, 7, 1> bestEigen;
-            for (int i = 0; i < 7; i++) bestEigen[i] = bestSolution[i];
-            nextArm.setJointAngles(bestEigen);
-            result.checkpoints.push_back({nextArm, true});
-            for (int i = 0; i < 7; i++) currentJointAngles[i] = bestSolution[i];
+    // Step 1: Compute ALL poses using selectGoalPoseSimulatedAnnealing
+    for (size_t i = 0; i < originalScanPoses.size(); ++i) {
+        auto [arm, valid] = selectGoalPoseSimulatedAnnealing(originalScanPoses[i], 1.0, 0.01, 0.95, 1000, 100);
+        
+        // Only store valid poses
+        if (valid) {
+            result.validArms.push_back(arm);
+            result.validPoseIndices.push_back(i);
         }
     }
 
-    // Build segments - find invalid checkpoints and repositioning points as boundaries
-    std::vector<size_t> boundaries;
-    for (size_t i = 0; i < result.checkpoints.size(); ++i) {
-        if (!result.checkpoints[i].second) boundaries.push_back(i); // Invalid checkpoints
-    }
-    for (size_t idx : repositionIndices) {
-        if (idx > 0) boundaries.push_back(idx); // Repositioning points (except first)
-    }
-    
-    std::sort(boundaries.begin(), boundaries.end());
-    boundaries.erase(std::unique(boundaries.begin(), boundaries.end()), boundaries.end());
+    // Step 2: Identify segment boundaries between subsequent valid poses where joint threshold > 5 degrees
+    std::vector<size_t> boundaries; // Indices in validArms array
+    const double jointThreshold = M_PI_2;  // 5 degrees in radians
+    const double positionThreshold = 0.05;             // 5 cm
 
-    // Create segments between boundaries
+    for (size_t i = 1; i < result.validArms.size(); ++i) {
+        // check joint jump
+        auto prevJoints = result.validArms[i-1].getJointAngles();
+        auto currJoints = result.validArms[i].getJointAngles();
+        bool hasLargeJump = false;
+        for (int j = 0; j < 7; ++j) {
+            if (std::abs(currJoints[j] - prevJoints[j]) > jointThreshold) {
+                hasLargeJump = true;
+                break;
+            }
+        }
+
+        // use the original scan poses (actual target transforms) instead of
+        // the achieved end-effector pose
+        auto prevPose = originalScanPoses[result.validPoseIndices[i-1]];
+        auto currPose = originalScanPoses[result.validPoseIndices[i]];
+        Eigen::Vector3d prevPos = prevPose.translation();
+        Eigen::Vector3d currPos = currPose.translation();
+        bool hasLargeGap = (currPos - prevPos).norm() > positionThreshold;
+
+        if (hasLargeJump || hasLargeGap) {
+            boundaries.push_back(i);
+        }
+    }
+
+    // Step 3: Create segments using indices into validArms array
     if (boundaries.empty()) {
-        // Single segment
-        size_t lastValid = result.checkpoints.size() - 1;
-        while (lastValid > 0 && !result.checkpoints[lastValid].second) lastValid--;
-        if (result.checkpoints[0].second && result.checkpoints[lastValid].second) {
-            result.validSegments.push_back({0, lastValid});
+        // Single segment for all valid poses
+        if (!result.validArms.empty()) {
+            result.validSegments.push_back({0, result.validArms.size() - 1});
         }
     } else {
         size_t start = 0;
+        
         for (size_t boundary : boundaries) {
             if (boundary > start) {
-                size_t end = boundary - 1;
-                while (end >= start && !result.checkpoints[end].second) {
-                    if (end == 0) break;
-                    end--;
-                }
-                if (end >= start && result.checkpoints[start].second && result.checkpoints[end].second) {
-                    result.validSegments.push_back({start, end});
-                }
+                result.validSegments.push_back({start, boundary - 1});
             }
-            start = result.checkpoints[boundary].second ? boundary : boundary + 1;
+            start = boundary;
         }
         
         // Final segment
-        if (start < result.checkpoints.size()) {
-            size_t end = result.checkpoints.size() - 1;
-            while (end >= start && !result.checkpoints[end].second) {
-                if (end == 0) break;
-                end--;
-            }
-            if (end >= start && result.checkpoints[start].second && result.checkpoints[end].second) {
-                result.validSegments.push_back({start, end});
-            }
-        }
-    }
-
-    for (size_t i = 0; i < result.checkpoints.size(); ++i) {
-        if (result.checkpoints[i].second) {
-            result.firstValidIndex = i;
-            break;
+        if (start < result.validArms.size()) {
+            result.validSegments.push_back({start, result.validArms.size() - 1});
         }
     }
 

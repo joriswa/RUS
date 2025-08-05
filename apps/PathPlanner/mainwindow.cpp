@@ -785,13 +785,10 @@ std::vector<Eigen::Matrix4d> MainWindow::readPosesFromCSV(const std::string &fil
         Eigen::Quaterniond q(values[3], values[4], values[5], values[6]);
         q.normalize();
 
+        // Build the transform without local offset
         Eigen::Matrix4d T = Eigen::Matrix4d::Identity();
-        T.block<3, 3>(0, 0) = q.toRotationMatrix();
-
-        T.block<3, 1>(0, 3) = Eigen::Vector3d(x, y, z);
-
-        const Eigen::Vector3d local_move(0.0, 0.0, 0.0);
-        T.block<3, 1>(0, 3) += T.block<3, 3>(0, 0) * local_move;
+        T.block<3,3>(0,0) = q.toRotationMatrix();
+        T.block<3,1>(0,3) = Eigen::Vector3d(x, y, z);
 
         poses.push_back(T);
     }
@@ -980,6 +977,12 @@ void MainWindow::onScanPoseSelected()
         auto [temp, succ] = _usPlanner->getPathPlanner()->selectGoalPoseSimulatedAnnealing(
             targetPose);
         if (succ) {
+            // print joint angles by iterating over the vector with a for loop like a caveman
+            qDebug() << "Selected pose joint angles:";
+            for (const auto &angle : temp.getJointAngles()) {
+                qDebug() << angle;
+            }
+
             _robotArm->setJointAngles(temp.getJointAngles());
             _robotArm->updateEntities();
         }
@@ -1034,8 +1037,8 @@ void MainWindow::createPlottingData()
 void MainWindow::planPathBetweenFirstTwoPoses()
 {
     // Check if we have at least 2 scan poses loaded
-    if (_scanPoses.size() < 2) {
-        ui->statusbar->showMessage("Error: Need at least 2 scan poses loaded for planning.");
+    if (_scanPoses.size() < 1) {
+        ui->statusbar->showMessage("Error: Need at least 1 scan poses loaded for planning.");
         return;
     }
 
@@ -1043,10 +1046,10 @@ void MainWindow::planPathBetweenFirstTwoPoses()
 
     try {
         // Use first scan pose as start
-        Eigen::Affine3d startPose = Eigen::Affine3d(_scanPoses[0]);
-        auto startConfig = pathPlanner->selectGoalPose(startPose).first;
-        _robotArm->setJointAngles(startConfig.getJointAngles());
-        _robotArm->updateEntities();
+        // Eigen::Affine3d startPose = Eigen::Affine3d(_scanPoses[0]);
+        // auto startConfig = pathPlanner->selectGoalPose(startPose).first;
+        // _robotArm->setJointAngles(startConfig.getJointAngles());
+        // _robotArm->updateEntities();
         pathPlanner->setStartPose(*_robotArm);
 
         // Use second scan pose as goal
@@ -1091,58 +1094,43 @@ void MainWindow::planPathBetweenFirstTwoPoses()
 void MainWindow::planSTOMPBetweenFirstTwoPoses()
 {
     // Check if we have at least 2 scan poses loaded
-    if (_scanPoses.size() < 2) {
-        ui->statusbar->showMessage("Error: Need at least 2 scan poses loaded for STOMP planning.");
+    if (_scanPoses.size() < 1) {
+        ui->statusbar->showMessage("Error: Need at least 1 scan pose loaded for STOMP planning.");
         return;
     }
-
-    _robotArm->deleteEntities();
 
     auto motionGenerator = _usPlanner->getMotionGenerator();
     auto pathPlanner = _usPlanner->getPathPlanner();
 
     try {
-        // Use first scan pose as start
-        Eigen::Affine3d startPose = Eigen::Affine3d(_scanPoses[0]);
-        auto startConfig = pathPlanner->selectGoalPose(startPose).first;
-        _robotArm->setJointAngles(startConfig.getJointAngles());
+        // Start configuration (from PathPlanner mainwindow)
+        Eigen::VectorXd startJoints(7);
+        Eigen::VectorXd endJoints(7);
+        startJoints << 0.374894, -0.043533, 0.087470, -1.533429, 0.02237, 1.050135, 0.075773;
 
-        // Use second scan pose as goal
-        Eigen::Affine3d goalPose = Eigen::Affine3d(_scanPoses[1]);
-
-        // Create waypoints matrix with start and goal
+        // Goal configuration (user provided)
+        endJoints << 0.596436, 1.26305, -1.17123, -2.0521, -2.42531, 2.00703, 2.35084;
         Eigen::MatrixXd waypoints(2, 7);
-        waypoints.row(0) = startConfig.getJointAngles().transpose();
+        waypoints.row(0) = startJoints;
 
         // Get goal joint configuration
-        auto goalConfig = pathPlanner->selectGoalPose(goalPose).first;
-        waypoints.row(1) = goalConfig.getJointAngles().transpose();
+        waypoints.row(1) = endJoints;
 
         motionGenerator->setWaypoints(waypoints);
 
         ui->statusbar->showMessage(
             "Running STOMP with early termination between first two scan poses...");
 
-        // Configure STOMP parameters
-        StompConfig config;
-        config.numJoints = 7;
-        config.numNoisyTrajectories = 5;
-        config.numBestSamples = 5;
-        config.maxIterations = 1000;
-        config.learningRate = 0.1;
-        config.temperature = 10.0;
-        config.dt = 0.1;
-        config.jointStdDevs = Eigen::VectorXd::Constant(7, 0.1);
-
         // Vector to store intermediate theta matrices (no longer needed)
         // std::vector<Eigen::MatrixXd> intermediateThetas;
 
         // Run STOMP (regular version)
-        bool success = motionGenerator->performSTOMP(config, nullptr);
+        StompConfig config;
+        // CRITICAL: Disable internal STOMP parallelization to prevent race conditions on shared matrices
+        config.disableInternalParallelization = true;
+        bool success = motionGenerator->performSTOMP(config);
 
         if (success) {
-            // _intermediateThetas = intermediateThetas; // No longer available
-
             ui->statusbar->showMessage("STOMP successful! Found collision-free solution");
 
             // Save the final trajectory
@@ -1164,8 +1152,23 @@ void MainWindow::planSTOMPBetweenFirstTwoPoses()
                 points.push_back(QVector3D(position.x(), position.y(), position.z()));
             }
 
-            // Create path visualization
-            createPathEntity(_rootEntity, points);
+            qDebug() << "Trajectory" << (0 + 1) << ":" << path.size()
+                     << "points, contact force:" << (false ? "yes" : "no");
+
+            // Create the item text with a visual indicator for contact force trajectories
+            QString itemText = QString("Trajectory %1 (%2 points)%3")
+                                   .arg(0 + 1)
+                                   .arg(path.size())
+                                   .arg(false ? " [C]" : "");
+
+            QListWidgetItem *item = new QListWidgetItem(itemText);
+            item->setData(Qt::UserRole, QVariant(static_cast<int>(0)));
+
+            if (false) {
+                item->setForeground(QBrush(QColor("blue"))); // Blue for contact force trajectories
+            }
+
+            ui->listWidget_trajectories->addItem(item);
 
         } else {
             ui->statusbar->showMessage(

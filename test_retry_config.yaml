@@ -1,0 +1,18 @@
+stomp_config:
+  numNoisyTrajectories: 20
+  maxIterations: 50
+  maxComputeTimeMs: 3000
+  convergenceThreshold: 0.0001
+  smoothnessWeight: 0.1
+  obstacleWeight: 1000.0
+  jointLimitWeight: 1000.0
+  maxJointVelocity: 2.0
+  maxJointAcceleration: 5.0
+  velocityWeight: 1.0
+  accelerationWeight: 1.0
+  
+waypoints:
+  - [0.0, 0.0, 0.0, -1.57, 0.0, 1.57, 0.0]
+  - [0.3, 0.2, 0.0, -1.3, 0.0, 1.7, 0.0]
+
+num_trials: 5

@@ -1,0 +1,18 @@
+stomp_config:
+  numNoisyTrajectories: 3     # Very few samples - likely to fail
+  maxIterations: 5            # Very few iterations - likely to fail
+  maxComputeTimeMs: 1000      # Short time limit
+  convergenceThreshold: 0.0001
+  smoothnessWeight: 0.1
+  obstacleWeight: 1000.0
+  jointLimitWeight: 1000.0
+  maxJointVelocity: 2.0
+  maxJointAcceleration: 5.0
+  velocityWeight: 1.0
+  accelerationWeight: 1.0
+  
+waypoints:
+  - [0.0, 0.0, 0.0, -1.57, 0.0, 1.57, 0.0]
+  - [0.8, 0.8, 0.0, -0.5, 0.0, 2.5, 0.0]    # Large movement - likely to fail
+
+num_trials: 1

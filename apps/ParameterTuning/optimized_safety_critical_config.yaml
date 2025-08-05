@@ -1,0 +1,30 @@
+csv_file: /Users/joris/Uni/MA/Code/PathPlanner_US_wip/apps/ParameterTuning/Data/Ext_Ant_Scan/scan_pose_list_ee.csv
+obstacles_file: /Users/joris/Uni/MA/Code/PathPlanner_US_wip/apps/ParameterTuning/Data/Ext_Ant_Scan/obstacles.xml
+urdf_file: /Users/joris/Uni/MA/robot_definition/panda_US.urdf
+output_file: safety_critical_optimized_results.json
+stomp:
+  temperature: 3.478086968522247
+  learning_rate: 1.0
+  max_iterations: 321
+  N: 94
+  num_noisy_trajectories: 3
+  num_best_samples: 10
+  obstacle_cost_weight: 83.41182143924175
+  constraint_cost_weight: 4.325548302497695
+  control_cost_weight: 8.111941985431918e-10
+  joint_std_devs:
+  - 0.08116262258099888
+  - 0.19063571821788408
+  - 0.14907884894416698
+  - 0.12374511199743696
+  - 0.039643541684062936
+  - 0.039638958863878505
+  - 0.021035886311957897
+evaluation:
+  trajectory_pairs: 20
+'# Description': Safety-Critical Applications (100% Success Rate)
+'# Performance':
+  success_rate: '1.0000'
+  planning_time_ms: '2335.9'
+  path_length: '3.0116'
+  clearance_m: '0.2176'

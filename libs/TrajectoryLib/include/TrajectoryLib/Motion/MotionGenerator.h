@@ -19,6 +19,9 @@
 #include <random>
 #include <unsupported/Eigen/Splines>
 #include <vector>
+#include <mutex>
+#include <atomic>
+#include <memory>
 
 /**
  * @brief Exception thrown when STOMP optimization times out
@@ -79,25 +82,34 @@ private:
  */
 struct StompConfig
 {
-    int numNoisyTrajectories = 8;         ///< Number of noisy trajectory samples per iteration (optimized)
-    int numBestSamples = 6;               ///< Number of best samples to use for updates (optimized)
-    int maxIterations = 250;              ///< Maximum optimization iterations (as requested)
-    int N = 60;                          ///< Number of trajectory points (optimized)
-    double dt = 0.1;                     ///< Time step for trajectory discretization
-    double learningRate = 0.5205343090882355;  ///< Learning rate for trajectory updates (optimized)
-    double temperature = 21.91837405134739;    ///< Temperature parameter for sample weighting (optimized)
-    int numJoints = 7;                     ///< Number of robot joints
-    double outputFrequency = 1000.0;         ///< Output frequency in Hz for quintic polynomial fitting
-    double obstacleCostWeight = 2.2840139633539644;   ///< Weight for obstacle cost in composite cost function (optimized)
-    double constraintCostWeight = 1.1264194721037395; ///< Weight for constraint cost in composite cost function (optimized)
+    int numNoisyTrajectories    = 3;        ///< Number of noisy trajectory samples per iteration
+    int numBestSamples          = 10;       ///< Number of best samples to use for updates
+    int maxIterations           = 100;      ///< Maximum optimization iterations
+    double trajectoryDuration   = 9.3;      ///< Total trajectory duration in seconds (N calculated from this)
+    double dt                   = 0.1;      ///< Time step for trajectory discretization (tunable parameter)
+    double learningRate         = 1.0;      ///< Learning rate for trajectory updates
+    double temperature          = 3.478;    ///< Temperature parameter for sample weighting
+    int numJoints               = 7;        ///< Number of robot joints
+    double outputFrequency      = 1000.0;   ///< Output frequency in Hz for quintic polynomial fitting
 
-    Eigen::VectorXd jointStdDevs           ///< Standard deviations for noise per joint (optimized for each joint)
-        = (Eigen::VectorXd(7) << 0.0611352765991869, 0.02090525430698372, 0.07965723143901145, 
-           0.0735809922744204, 0.042613461131609166, 0.04045309580681231, 0.08629620972690565).finished();
+    double obstacleCostWeight   = 83.41;    ///< Weight for obstacle cost
+    double constraintCostWeight = 4.33;     ///< Weight for constraint cost
+    double controlCostWeight    = 8.11e-10; ///< Weight for control/smoothness cost
 
-    bool enableEarlyStopping = false;      ///< Enable early stopping when collision-free trajectory found
-    int earlyStoppingPatience = 1;         ///< Number of consecutive collision-free iterations before stopping
-    double maxComputeTimeMs = 0.0;         ///< Maximum computation time in milliseconds (0 = no limit)
+    Eigen::VectorXd jointStdDevs = (Eigen::VectorXd(7) << 
+        0.081,  // joint 0
+        0.191,  // joint 1 (highest noise)
+        0.149,  // joint 2
+        0.124,  // joint 3
+        0.040,  // joint 4
+        0.040,  // joint 5
+        0.021   // joint 6 (lowest noise)
+    ).finished();                   ///< Standard deviations for noise per joint
+
+    bool enableEarlyStopping            = true;  ///< Enable early stopping when collision-free trajectory found
+    int earlyStoppingPatience           = 10;    ///< Number of consecutive collision-free iterations before stopping
+    double maxComputeTimeMs             = 0.0;   ///< Maximum computation time in milliseconds
+    bool disableInternalParallelization = false; ///< Disable internal STOMP parallelization
 };
 
 /**
@@ -120,10 +132,16 @@ public:
 };
 
 /**
- * @brief Cost calculator for obstacle avoidance using signed distance field
+ * @brief Cost calculator for obstacle avoidance using original STOMP paper approach with collision checking
  * 
- * Computes trajectory costs based on proximity to obstacles using a precomputed
- * signed distance field for efficient collision avoidance.
+ * Computes trajectory costs based on proximity to obstacles using signed distance field
+ * with sphere representation of robot links and velocity scaling as in the original STOMP paper.
+ * Features:
+ * - Each robot link represented by a sphere at bounding box center
+ * - Sphere position scaled by link velocity for motion prediction
+ * - Simple quadratic cost function for clearance violations
+ * - Actual collision detection with flat penalty for any box intersection
+ * - Combines distance-based smooth costs with discrete collision penalties
  */
 class ObstacleCostCalculator : public CostCalculator
 {
@@ -156,15 +174,20 @@ public:
 };
 
 /**
- * @brief Cost calculator for joint velocity and acceleration constraints
+ * @brief Cost calculator for joint velocity and acceleration constraints with improved robustness
  * 
  * Computes penalty costs when trajectory violates joint velocity or acceleration limits.
+ * Features enhanced cost calculation with:
+ * - Small dt protection (skips unrealistic time steps < 0.02s)
+ * - Normalized violation costs (violation/limit ratio)
+ * - Cost capping to prevent runaway accumulation
+ * - Length normalization for trajectory-independent scaling
  */
 class ConstraintCostCalculator : public CostCalculator
 {
 private:
-    std::vector<double> _maxJointVelocities = std::vector<double>(7, .4);
-    std::vector<double> _maxJointAccelerations = std::vector<double>(7, .5);
+    std::vector<double> _maxJointVelocities = std::vector<double>(7, 0.5);   ///< Conservative joint velocity limits (rad/s)
+    std::vector<double> _maxJointAccelerations = std::vector<double>(7, 0.8); ///< Conservative joint acceleration limits (rad/s²)
 
 public:
     /**
@@ -173,6 +196,28 @@ public:
      * @param maxAcc Maximum joint accelerations  
      */
     ConstraintCostCalculator(const std::vector<double> &maxVel, const std::vector<double> &maxAcc);
+
+    double computeCost(const Eigen::MatrixXd &trajectory, double dt) override;
+};
+
+/**
+ * @brief Cost calculator for trajectory smoothness control from original STOMP paper
+ * 
+ * Computes the control cost q_control = (1/2) * θ^T * R * θ where R is the 
+ * finite difference matrix that penalizes acceleration (second-order derivatives).
+ * This encourages smooth, natural trajectories by minimizing squared accelerations.
+ */
+class ControlCostCalculator : public CostCalculator
+{
+private:
+    Eigen::MatrixXd _R;  ///< Control cost matrix (finite difference matrix for acceleration)
+
+public:
+    /**
+     * @brief Construct control cost calculator
+     * @param R Control cost matrix from STOMP finite difference formulation
+     */
+    ControlCostCalculator(const Eigen::MatrixXd &R);
 
     double computeCost(const Eigen::MatrixXd &trajectory, double dt) override;
 };
@@ -254,15 +299,17 @@ public:
     void performHauser(unsigned int maxIterations, const std::string &out = "", unsigned int outputFrequency = 100);
     
     /**
-     * @brief Perform trajectory optimization using STOMP algorithm
+     * @brief Perform trajectory optimization using STOMP algorithm with automatic restart on failure
      * @param config STOMP configuration parameters
      * @param sharedPool Optional shared thread pool for parallelization
      * @param trajectoryIndex Optional trajectory index for logging
-     * @return True if collision-free trajectory found
+     * @param maxRetries Maximum number of restart attempts on failure (default: 1, set to 0 to disable)
+     * @return True if collision-free trajectory found (including after restart)
      */
     bool performSTOMP(const StompConfig &config,
                       std::shared_ptr<boost::asio::thread_pool> sharedPool = nullptr,
-                      int trajectoryIndex = -1);
+                      int trajectoryIndex = -1,
+                      int maxRetries = 1);
 
     /**
      * @brief Get the optimized trajectory
@@ -350,23 +397,38 @@ public:
     void saveTrajectoryToCSV(const std::string &filename);
 
     /**
-     * @brief Check if trajectory satisfies velocity and acceleration constraints
+     * @brief Check if trajectory satisfies velocity and acceleration constraints with small movement bypass
      * @param trajectory Joint space trajectory matrix (N x DOF)
      * @param dt Time step between trajectory points
-     * @return True if all constraints are satisfied
+     * @return True if all constraints are satisfied. Automatically returns true for small repositioning movements (< 10°) to avoid false violations from conservative time estimation.
      */
     bool isTrajectoryValid(const Eigen::MatrixXd &trajectory, double dt) const;
 
     /**
-     * @brief Check if trajectory satisfies constraints with safety margins
+     * @brief Check if trajectory satisfies constraints with safety margins and small movement bypass
      * @param trajectory Joint space trajectory matrix (N x DOF) 
      * @param dt Time step between trajectory points
      * @param velocityMargin Velocity limit multiplier (e.g., 1.5 for 50% margin)
      * @param accelerationMargin Acceleration limit multiplier (e.g., 1.5 for 50% margin)
-     * @return True if all constraints are satisfied within margins
+     * @return True if all constraints are satisfied within margins. Automatically returns true for small repositioning movements (< 5°) to avoid false violations.
      */
     bool isTrajectoryValidWithMargin(const Eigen::MatrixXd &trajectory, double dt, 
                                      double velocityMargin, double accelerationMargin) const;
+
+    /**
+     * @brief Enable verbose debug output for STOMP optimization
+     * Call this before performSTOMP to see detailed debugging information
+     */
+    static void enableStompDebug() {
+        Logger::instance().setDebugEnabled(true);
+    }
+    
+    /**
+     * @brief Disable debug output for STOMP optimization  
+     */
+    static void disableStompDebug() {
+        Logger::instance().setDebugEnabled(false);
+    }
 
 private:
     /**
@@ -374,15 +436,25 @@ private:
      */
     struct STOMPConvergenceState {
         bool success = false;
-        Eigen::MatrixXd bestCollisionFreeTheta;
-        double bestCollisionFreeCost = std::numeric_limits<double>::max();
+        Eigen::MatrixXd bestValidTheta;
+        double bestValidCost = std::numeric_limits<double>::max();
         double prevTrajectoryCost = std::numeric_limits<double>::max();
         int noChangeCounter = 0;
         int earlyStoppingCounter = 0;
         QElapsedTimer overallTimer;
         
+        // Weighted theta tracking (primary solution)
+        bool weightedThetaEverSucceeded = false;
+        Eigen::MatrixXd bestWeightedTheta;
+        double bestWeightedCost = std::numeric_limits<double>::max();
+        
+        // Noisy sample tracking (backup solution)
+        bool noisySampleAvailable = false;
+        Eigen::MatrixXd bestNoisySample;
+        double bestNoisyCost = std::numeric_limits<double>::max();
+        
         // Convergence parameters
-        static constexpr double costConvergenceThreshold = 1e-6;
+        static constexpr double costConvergenceThreshold = 1.;
         static constexpr int convergencePatience = 3;
         
         STOMPConvergenceState() {
@@ -404,9 +476,9 @@ private:
 
     std::unique_ptr<CompositeCostCalculator> _costCalculator;     ///< Cost function for optimization
     std::vector<TrajectoryPoint> _path;                          ///< Optimized trajectory
-    std::vector<double> _maxJointVelocities = std::vector<double>(7, .4);  ///< Joint velocity limits
-    std::vector<double> _maxJointAccelerations = std::vector<double>(7, .5); ///< Joint acceleration limits
-    Eigen::MatrixXd _M, _R, _L;                                  ///< STOMP smoothing matrices
+    std::vector<double> _maxJointVelocities = std::vector<double>(7, 0.5);   ///< Conservative joint velocity limits (rad/s)
+    std::vector<double> _maxJointAccelerations = std::vector<double>(7, 0.8); ///< Conservative joint acceleration limits (rad/s²)
+    Eigen::MatrixXd _M, _R, _L;                                  ///< STOMP smoothing matrices with baked-in boundary conditions
     bool _matricesInitialized = false;                          ///< Flag for matrix initialization
     Eigen::MatrixXd _waypoints;                                  ///< Waypoints for trajectory planning
     const int _numJoints = 7;                                   ///< Number of robot joints
@@ -420,6 +492,18 @@ private:
     // Original helper methods
     void generateInitialTrajectory();
     void convertToTimeOptimal();
+    /**
+     * @brief Initialize finite difference matrices for STOMP optimization with boundary conditions
+     * 
+     * Creates improved finite difference matrices that:
+     * - Bake boundary constraints directly into the matrix structure
+     * - Use symmetric positive definite formulation for numerical stability
+     * - Operate on interior points while keeping start/end points fixed
+     * - Minimize second derivative (acceleration) for smooth trajectories
+     * 
+     * @param N Number of trajectory points (including fixed boundaries)
+     * @param dt Time step between trajectory points
+     */
     void initializeMatrices(const int &N, const double &dt);
     Eigen::MatrixXd initializeTrajectory(Eigen::Matrix<double, 7, 1> goalVec,
                                                       Eigen::Matrix<double, 7, 1> startVec,
@@ -511,6 +595,44 @@ private:
      * @return True if collision detected
      */
     bool checkCollisions(const Eigen::MatrixXd &theta, int N);
+    
+    /**
+     * @brief Log initial trajectory state for debugging
+     * @param theta Initial trajectory
+     * @param N Number of trajectory points
+     * @param dt Time step
+     * @param config STOMP configuration
+     */
+    void logInitialTrajectoryState(const Eigen::MatrixXd &theta, int N, double dt, const StompConfig &config);
+    
+    /**
+     * @brief Track best valid solution found among samples
+     * @param noisyTrajectories Generated trajectory samples
+     * @param costs Corresponding costs
+     * @param convergenceState Convergence state (modified)
+     * @param iteration Current iteration number
+     * @param N Number of trajectory points
+     * @param dt Time step
+     */
+    void updateBestValidSolution(const std::vector<Eigen::MatrixXd> &noisyTrajectories,
+                               const std::vector<double> &costs,
+                               STOMPConvergenceState &convergenceState,
+                               int iteration, int N, double dt);
+    
+    /**
+     * @brief Update optimization state and convergence counters
+     * @param theta Current trajectory
+     * @param convergenceState Convergence state (modified)
+     * @param config STOMP configuration
+     * @param iteration Current iteration number
+     * @param dt Time step
+     * @param previousTheta Previous trajectory for change measurement
+     */
+    void updateOptimizationState(const Eigen::MatrixXd &theta,
+                                STOMPConvergenceState &convergenceState,
+                                const StompConfig &config,
+                                int iteration, double dt,
+                                const Eigen::MatrixXd &previousTheta);
     
     /**
      * @brief Update convergence state and early stopping counters

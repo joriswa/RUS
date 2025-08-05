@@ -1,0 +1,444 @@
+{
+  "study_info": {
+    "study_name": "comprehensive_stomp_optimization",
+    "total_trials": 1008,
+    "pareto_solutions": 15,
+    "timestamp": 1754254425.159029,
+    "methodology": "NSGAII multi-objective optimization"
+  },
+  "design_decisions": {
+    "fixed_parameters": {
+      "learning_rate": 1.0
+    },
+    "optimized_parameters": [
+      "temperature",
+      "max_iterations",
+      "N",
+      "num_noisy_trajectories",
+      "num_best_samples",
+      "joint_std_devs",
+      "obstacle_cost_weight",
+      "constraint_cost_weight",
+      "control_cost_weight"
+    ],
+    "objectives": [
+      "success_rate (maximize)",
+      "avg_planning_time_ms (minimize)",
+      "avg_path_length (minimize)",
+      "avg_clearance (maximize)"
+    ]
+  },
+  "methodology_notes": {
+    "approach": "NSGAII for methodologically sound multi-objective optimization",
+    "no_weighted_scalarization": "Avoided problematic weighted sum of different scales",
+    "natural_scale_handling": "NSGAII handles different objective scales naturally",
+    "comprehensive_optimization": "All STOMP parameters including cost weights optimized"
+  },
+  "pareto_solutions": [
+    {
+      "solution_id": 1,
+      "objectives": {
+        "success_rate": 1.0,
+        "planning_time_ms": 314.8201021500001,
+        "path_length": 2.3199787074625267,
+        "clearance_m": 0.1651276143983214
+      },
+      "parameters": {
+        "constraint_cost_weight": 4.325548302497695,
+        "control_cost_weight": 8.111941985431918e-10,
+        "dt": 0.15621088666940683,
+        "joint_std_dev_0": 0.08116262258099888,
+        "joint_std_dev_1": 0.19063571821788408,
+        "joint_std_dev_2": 0.14907884894416698,
+        "joint_std_dev_3": 0.12374511199743696,
+        "joint_std_dev_4": 0.039643541684062936,
+        "joint_std_dev_5": 0.039638958863878505,
+        "joint_std_dev_6": 0.021035886311957897,
+        "learning_rate": 1.0,
+        "max_iterations": 321,
+        "num_best_samples": 10,
+        "num_noisy_trajectories": 3,
+        "obstacle_cost_weight": 83.41182143924175,
+        "temperature": 3.478086968522247
+      }
+    },
+    {
+      "solution_id": 2,
+      "objectives": {
+        "success_rate": 0.99,
+        "planning_time_ms": 290.62825878787874,
+        "path_length": 1.9930095233913867,
+        "clearance_m": 0.15514731788491873
+      },
+      "parameters": {
+        "constraint_cost_weight": 11.889049920354644,
+        "control_cost_weight": 1.7070728830306614e-10,
+        "dt": 0.1184104976325554,
+        "joint_std_dev_0": 0.044846856872152424,
+        "joint_std_dev_1": 0.06780602616231217,
+        "joint_std_dev_2": 0.1097037220101252,
+        "joint_std_dev_3": 0.092069553542002,
+        "joint_std_dev_4": 0.06533353663762796,
+        "joint_std_dev_5": 0.1262520499972521,
+        "joint_std_dev_6": 0.036503833523887946,
+        "learning_rate": 1.0,
+        "max_iterations": 215,
+        "num_best_samples": 3,
+        "num_noisy_trajectories": 13,
+        "obstacle_cost_weight": 51.909209402947546,
+        "temperature": 1.2393641292873507
+      }
+    },
+    {
+      "solution_id": 3,
+      "objectives": {
+        "success_rate": 0.99,
+        "planning_time_ms": 366.34296255555563,
+        "path_length": 2.2223332261674957,
+        "clearance_m": 0.1651769084836571
+      },
+      "parameters": {
+        "constraint_cost_weight": 4.325548302497695,
+        "control_cost_weight": 8.111941985431918e-10,
+        "dt": 0.15621088666940683,
+        "joint_std_dev_0": 0.08116262258099888,
+        "joint_std_dev_1": 0.19063571821788408,
+        "joint_std_dev_2": 0.14907884894416698,
+        "joint_std_dev_3": 0.12374511199743696,
+        "joint_std_dev_4": 0.039643541684062936,
+        "joint_std_dev_5": 0.039638958863878505,
+        "joint_std_dev_6": 0.021035886311957897,
+        "learning_rate": 1.0,
+        "max_iterations": 321,
+        "num_best_samples": 10,
+        "num_noisy_trajectories": 3,
+        "obstacle_cost_weight": 83.41182143924175,
+        "temperature": 3.478086968522247
+      }
+    },
+    {
+      "solution_id": 4,
+      "objectives": {
+        "success_rate": 0.96,
+        "planning_time_ms": 290.1956268020834,
+        "path_length": 2.1703725534122023,
+        "clearance_m": 0.16906292206783233
+      },
+      "parameters": {
+        "constraint_cost_weight": 16.327682426251197,
+        "control_cost_weight": 3.42205290327069e-07,
+        "dt": 0.1980330404900776,
+        "joint_std_dev_0": 0.08384868504100158,
+        "joint_std_dev_1": 0.061556316037040225,
+        "joint_std_dev_2": 0.16746012673886657,
+        "joint_std_dev_3": 0.07778313207178196,
+        "joint_std_dev_4": 0.06337755684060234,
+        "joint_std_dev_5": 0.11311225580006722,
+        "joint_std_dev_6": 0.0367756027452049,
+        "learning_rate": 1.0,
+        "max_iterations": 83,
+        "num_best_samples": 3,
+        "num_noisy_trajectories": 13,
+        "obstacle_cost_weight": 1.5466895952366375,
+        "temperature": 3.2285682249407546
+      }
+    },
+    {
+      "solution_id": 5,
+      "objectives": {
+        "success_rate": 1.0,
+        "planning_time_ms": 206.30081959999998,
+        "path_length": 2.1253247525389085,
+        "clearance_m": 0.16484721482638995
+      },
+      "parameters": {
+        "constraint_cost_weight": 6.818541910932196,
+        "control_cost_weight": 5.1826098910919926e-06,
+        "dt": 0.12661209538663487,
+        "joint_std_dev_0": 0.16341362948117188,
+        "joint_std_dev_1": 0.18025734698546372,
+        "joint_std_dev_2": 0.07042066024465414,
+        "joint_std_dev_3": 0.030909865660258586,
+        "joint_std_dev_4": 0.05330768088296892,
+        "joint_std_dev_5": 0.0911504798389887,
+        "joint_std_dev_6": 0.1654228055252737,
+        "learning_rate": 1.0,
+        "max_iterations": 53,
+        "num_best_samples": 3,
+        "num_noisy_trajectories": 8,
+        "obstacle_cost_weight": 12.866671366034598,
+        "temperature": 3.4568492746997395
+      }
+    },
+    {
+      "solution_id": 6,
+      "objectives": {
+        "success_rate": 0.92,
+        "planning_time_ms": 165.30412176086958,
+        "path_length": 2.1958724183436487,
+        "clearance_m": 0.1643544995937226
+      },
+      "parameters": {
+        "constraint_cost_weight": 10.220556754177585,
+        "control_cost_weight": 3.42205290327069e-07,
+        "dt": 0.1980330404900776,
+        "joint_std_dev_0": 0.14531405205603182,
+        "joint_std_dev_1": 0.061556316037040225,
+        "joint_std_dev_2": 0.16746012673886657,
+        "joint_std_dev_3": 0.11664266753820429,
+        "joint_std_dev_4": 0.1564837641913666,
+        "joint_std_dev_5": 0.10382116330923424,
+        "joint_std_dev_6": 0.10931923758257887,
+        "learning_rate": 1.0,
+        "max_iterations": 61,
+        "num_best_samples": 3,
+        "num_noisy_trajectories": 3,
+        "obstacle_cost_weight": 32.12124212655634,
+        "temperature": 1.7674099715983436
+      }
+    },
+    {
+      "solution_id": 7,
+      "objectives": {
+        "success_rate": 0.97,
+        "planning_time_ms": 205.69734190721647,
+        "path_length": 2.4387154842356225,
+        "clearance_m": 0.17242715799908673
+      },
+      "parameters": {
+        "constraint_cost_weight": 10.761916213087693,
+        "control_cost_weight": 2.8278010426386187e-10,
+        "dt": 0.15923245229177896,
+        "joint_std_dev_0": 0.1825705183336642,
+        "joint_std_dev_1": 0.19063571821788408,
+        "joint_std_dev_2": 0.14907884894416698,
+        "joint_std_dev_3": 0.10299602445273698,
+        "joint_std_dev_4": 0.19727358628101413,
+        "joint_std_dev_5": 0.039638958863878505,
+        "joint_std_dev_6": 0.13770575400711693,
+        "learning_rate": 1.0,
+        "max_iterations": 157,
+        "num_best_samples": 4,
+        "num_noisy_trajectories": 3,
+        "obstacle_cost_weight": 63.71944136532858,
+        "temperature": 1.0252714412375203
+      }
+    },
+    {
+      "solution_id": 8,
+      "objectives": {
+        "success_rate": 1.0,
+        "planning_time_ms": 271.45792955999997,
+        "path_length": 2.807237742495693,
+        "clearance_m": 0.16550886187850422
+      },
+      "parameters": {
+        "constraint_cost_weight": 1.0000230493197075,
+        "control_cost_weight": 1.96743280253061e-09,
+        "dt": 0.1396849968216628,
+        "joint_std_dev_0": 0.13587923402725657,
+        "joint_std_dev_1": 0.06922510445698808,
+        "joint_std_dev_2": 0.022359802667203107,
+        "joint_std_dev_3": 0.19028825207813332,
+        "joint_std_dev_4": 0.1934700862841663,
+        "joint_std_dev_5": 0.16359549614212762,
+        "joint_std_dev_6": 0.06787661614294044,
+        "learning_rate": 1.0,
+        "max_iterations": 358,
+        "num_best_samples": 6,
+        "num_noisy_trajectories": 14,
+        "obstacle_cost_weight": 20.402303379495375,
+        "temperature": 0.4809212446248971
+      }
+    },
+    {
+      "solution_id": 9,
+      "objectives": {
+        "success_rate": 0.99,
+        "planning_time_ms": 359.8352941515151,
+        "path_length": 2.4151947906200304,
+        "clearance_m": 0.16967477207859827
+      },
+      "parameters": {
+        "constraint_cost_weight": 10.220556754177585,
+        "control_cost_weight": 8.111941985431918e-10,
+        "dt": 0.15621088666940683,
+        "joint_std_dev_0": 0.03272290672827732,
+        "joint_std_dev_1": 0.19063571821788408,
+        "joint_std_dev_2": 0.14907884894416698,
+        "joint_std_dev_3": 0.12374511199743696,
+        "joint_std_dev_4": 0.05635803224202588,
+        "joint_std_dev_5": 0.10382116330923424,
+        "joint_std_dev_6": 0.021035886311957897,
+        "learning_rate": 1.0,
+        "max_iterations": 321,
+        "num_best_samples": 10,
+        "num_noisy_trajectories": 3,
+        "obstacle_cost_weight": 83.41182143924175,
+        "temperature": 3.478086968522247
+      }
+    },
+    {
+      "solution_id": 10,
+      "objectives": {
+        "success_rate": 0.98,
+        "planning_time_ms": 208.89236610204082,
+        "path_length": 1.9738946895726361,
+        "clearance_m": 0.1670246362368092
+      },
+      "parameters": {
+        "constraint_cost_weight": 4.325548302497695,
+        "control_cost_weight": 9.236099934536373e-09,
+        "dt": 0.15621088666940683,
+        "joint_std_dev_0": 0.19487200540296465,
+        "joint_std_dev_1": 0.19063571821788408,
+        "joint_std_dev_2": 0.14907884894416698,
+        "joint_std_dev_3": 0.12374511199743696,
+        "joint_std_dev_4": 0.06337755684060234,
+        "joint_std_dev_5": 0.11311225580006722,
+        "joint_std_dev_6": 0.0367756027452049,
+        "learning_rate": 1.0,
+        "max_iterations": 83,
+        "num_best_samples": 10,
+        "num_noisy_trajectories": 3,
+        "obstacle_cost_weight": 1.5466895952366375,
+        "temperature": 3.478086968522247
+      }
+    },
+    {
+      "solution_id": 11,
+      "objectives": {
+        "success_rate": 0.9,
+        "planning_time_ms": 403.75507820000007,
+        "path_length": 2.2306508736600783,
+        "clearance_m": 0.17030205812624963
+      },
+      "parameters": {
+        "constraint_cost_weight": 1.0000230493197075,
+        "control_cost_weight": 4.233032996527594e-09,
+        "dt": 0.1980330404900776,
+        "joint_std_dev_0": 0.13587923402725657,
+        "joint_std_dev_1": 0.061556316037040225,
+        "joint_std_dev_2": 0.16746012673886657,
+        "joint_std_dev_3": 0.07778313207178196,
+        "joint_std_dev_4": 0.06337755684060234,
+        "joint_std_dev_5": 0.19422107927526613,
+        "joint_std_dev_6": 0.0367756027452049,
+        "learning_rate": 1.0,
+        "max_iterations": 453,
+        "num_best_samples": 7,
+        "num_noisy_trajectories": 14,
+        "obstacle_cost_weight": 20.402303379495375,
+        "temperature": 3.2285682249407546
+      }
+    },
+    {
+      "solution_id": 12,
+      "objectives": {
+        "success_rate": 0.99,
+        "planning_time_ms": 277.22646593939396,
+        "path_length": 2.0735018708515014,
+        "clearance_m": 0.15510881274389898
+      },
+      "parameters": {
+        "constraint_cost_weight": 4.325548302497695,
+        "control_cost_weight": 1.7070728830306614e-10,
+        "dt": 0.15621088666940683,
+        "joint_std_dev_0": 0.08116262258099888,
+        "joint_std_dev_1": 0.19063571821788408,
+        "joint_std_dev_2": 0.1097037220101252,
+        "joint_std_dev_3": 0.12374511199743696,
+        "joint_std_dev_4": 0.06533353663762796,
+        "joint_std_dev_5": 0.1262520499972521,
+        "joint_std_dev_6": 0.036503833523887946,
+        "learning_rate": 1.0,
+        "max_iterations": 321,
+        "num_best_samples": 3,
+        "num_noisy_trajectories": 13,
+        "obstacle_cost_weight": 49.75925168806753,
+        "temperature": 1.2393641292873507
+      }
+    },
+    {
+      "solution_id": 13,
+      "objectives": {
+        "success_rate": 0.99,
+        "planning_time_ms": 331.88702146464647,
+        "path_length": 2.2846070308707898,
+        "clearance_m": 0.1682927520796553
+      },
+      "parameters": {
+        "constraint_cost_weight": 4.325548302497695,
+        "control_cost_weight": 4.233032996527594e-09,
+        "dt": 0.15621088666940683,
+        "joint_std_dev_0": 0.08116262258099888,
+        "joint_std_dev_1": 0.19063571821788408,
+        "joint_std_dev_2": 0.14907884894416698,
+        "joint_std_dev_3": 0.12374511199743696,
+        "joint_std_dev_4": 0.047096167681628456,
+        "joint_std_dev_5": 0.19422107927526613,
+        "joint_std_dev_6": 0.021035886311957897,
+        "learning_rate": 1.0,
+        "max_iterations": 321,
+        "num_best_samples": 10,
+        "num_noisy_trajectories": 14,
+        "obstacle_cost_weight": 72.52275941088902,
+        "temperature": 3.7640458721003376
+      }
+    },
+    {
+      "solution_id": 14,
+      "objectives": {
+        "success_rate": 1.0,
+        "planning_time_ms": 336.82312709999997,
+        "path_length": 2.4100074095476556,
+        "clearance_m": 0.1669924656353679
+      },
+      "parameters": {
+        "constraint_cost_weight": 1.0000230493197075,
+        "control_cost_weight": 4.233032996527594e-09,
+        "dt": 0.12661209538663487,
+        "joint_std_dev_0": 0.13587923402725657,
+        "joint_std_dev_1": 0.18025734698546372,
+        "joint_std_dev_2": 0.07042066024465414,
+        "joint_std_dev_3": 0.030909865660258586,
+        "joint_std_dev_4": 0.05330768088296892,
+        "joint_std_dev_5": 0.0633467488637626,
+        "joint_std_dev_6": 0.1654228055252737,
+        "learning_rate": 1.0,
+        "max_iterations": 453,
+        "num_best_samples": 2,
+        "num_noisy_trajectories": 14,
+        "obstacle_cost_weight": 20.402303379495375,
+        "temperature": 3.7640458721003376
+      }
+    },
+    {
+      "solution_id": 15,
+      "objectives": {
+        "success_rate": 0.97,
+        "planning_time_ms": 157.2310029690721,
+        "path_length": 1.8068591442749016,
+        "clearance_m": 0.16285037771279665
+      },
+      "parameters": {
+        "constraint_cost_weight": 4.325548302497695,
+        "control_cost_weight": 1.7070728830306614e-10,
+        "dt": 0.15621088666940683,
+        "joint_std_dev_0": 0.08116262258099888,
+        "joint_std_dev_1": 0.19063571821788408,
+        "joint_std_dev_2": 0.18569178747292692,
+        "joint_std_dev_3": 0.12374511199743696,
+        "joint_std_dev_4": 0.1934700862841663,
+        "joint_std_dev_5": 0.1262520499972521,
+        "joint_std_dev_6": 0.036503833523887946,
+        "learning_rate": 1.0,
+        "max_iterations": 321,
+        "num_best_samples": 3,
+        "num_noisy_trajectories": 4,
+        "obstacle_cost_weight": 49.75925168806753,
+        "temperature": 3.011316479960294
+      }
+    }
+  ]
+}

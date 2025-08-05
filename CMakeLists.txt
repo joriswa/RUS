@@ -1,6 +1,10 @@
 cmake_minimum_required(VERSION 3.5)
 project(PathPlanner VERSION 0.1 LANGUAGES CXX)
 
+# Force Release build for maximum performance
+set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
+set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG -march=native -flto" CACHE STRING "Release flags" FORCE)
+
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
@@ -8,8 +12,8 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Find common dependencies
-find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets OpenGL OpenGLWidgets)
-find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets OpenGL OpenGLWidgets)
+find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets OpenGL)
+find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets OpenGL)
 find_package(Eigen3 3.3 REQUIRED)
 find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS 3DCore 3DExtras 3DInput 3DLogic 3DRender Concurrent)
 find_package(Boost REQUIRED COMPONENTS math_c99 system log log_setup thread filesystem)
@@ -39,11 +43,12 @@ add_subdirectory(libs/USLib)
 
 # Add applications
 add_subdirectory(apps/PathPlanner)
+# add_subdirectory(apps/ParallelizationBenchmark)
+add_subdirectory(apps/ParameterTuning)
 # add_subdirectory(apps/ComparisonIK)
 # add_subdirectory(apps/ComparisonSTOMPHauser)
 # add_subdirectory(apps/UltrasoundRepositioningEvaluator)
 # add_subdirectory(apps/TrajectoryPlanningEvaluator)
-add_subdirectory(apps/ParameterTuning)
 
 # Install configuration
 include(GNUInstallDirs)

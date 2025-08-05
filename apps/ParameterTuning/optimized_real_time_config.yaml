@@ -1,0 +1,30 @@
+csv_file: /Users/joris/Uni/MA/Code/PathPlanner_US_wip/apps/ParameterTuning/Data/Ext_Ant_Scan/scan_pose_list_ee.csv
+obstacles_file: /Users/joris/Uni/MA/Code/PathPlanner_US_wip/apps/ParameterTuning/Data/Ext_Ant_Scan/obstacles.xml
+urdf_file: /Users/joris/Uni/MA/robot_definition/panda_US.urdf
+output_file: real_time_optimized_results.json
+stomp:
+  temperature: 1.7674099715983436
+  learning_rate: 1.0
+  max_iterations: 61
+  N: 39
+  num_noisy_trajectories: 3
+  num_best_samples: 7
+  obstacle_cost_weight: 32.12124212655634
+  constraint_cost_weight: 10.220556754177585
+  control_cost_weight: 3.450105453613018e-06
+  joint_std_devs:
+  - 0.03272290672827732
+  - 0.14551650957236906
+  - 0.15454915923721052
+  - 0.11664266753820429
+  - 0.1564837641913666
+  - 0.10382116330923424
+  - 0.10931923758257887
+evaluation:
+  trajectory_pairs: 20
+'# Description': Real-Time Applications (Fastest Planning)
+'# Performance':
+  success_rate: '0.9600'
+  planning_time_ms: '332.6'
+  path_length: '2.5459'
+  clearance_m: '0.2067'

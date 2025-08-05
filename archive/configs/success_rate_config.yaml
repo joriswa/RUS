@@ -1,0 +1,17 @@
+# STOMP Success Rate Optimization Config
+csv_file: /Users/joris/Uni/MA/Code/PathPlanner_US_wip/apps/ParameterTuning/Data/Ext_Ant_Scan/scan_pose_list_ee.csv
+evaluation:
+  trajectory_pairs: 10  # Test 10 pairs to see performance improvements
+obstacles_file: /Users/joris/Uni/MA/Code/PathPlanner_US_wip/apps/ParameterTuning/Data/Ext_Ant_Scan/obstacles.xml
+output_file: success_rate_results.json
+stomp:
+  N: 40
+  constraint_cost_weight: 1.6
+  joint_std_devs: [0.149691, 0.0132654, 0.0450644, 0.103875, 0.0647333, 0.131444, 0.113796]
+  learning_rate: 0.7
+  max_iterations: 200
+  num_best_samples: 10
+  num_noisy_trajectories: 15
+  obstacle_cost_weight: 8.0
+  temperature: 12.0
+urdf_file: /Users/joris/Uni/MA/robot_definition/panda_US.urdf
