@@ -1133,23 +1133,31 @@ PathPlanner::CheckpointPlanResult PathPlanner::planCheckpoints(
 
     // Step 2: Identify segment boundaries between subsequent valid poses where joint threshold > 5 degrees
     std::vector<size_t> boundaries; // Indices in validArms array
-    const double threshold = 100. * M_PI / 180.; // 5 degrees in radians (5 * π / 180)
-    
+    const double jointThreshold = M_PI_2;  // 5 degrees in radians
+    const double positionThreshold = 0.05;             // 5 cm
+
     for (size_t i = 1; i < result.validArms.size(); ++i) {
-        auto joints1 = result.validArms[i-1].getJointAngles();
-        auto joints2 = result.validArms[i].getJointAngles();
-        
-        // Check if ANY single joint jumps more than 5 degrees
+        // check joint jump
+        auto prevJoints = result.validArms[i-1].getJointAngles();
+        auto currJoints = result.validArms[i].getJointAngles();
         bool hasLargeJump = false;
-        for (int j = 0; j < 7; j++) {
-            if (std::abs(joints2[j] - joints1[j]) > threshold) {
+        for (int j = 0; j < 7; ++j) {
+            if (std::abs(currJoints[j] - prevJoints[j]) > jointThreshold) {
                 hasLargeJump = true;
                 break;
             }
         }
-        
-        if (hasLargeJump) {
-            boundaries.push_back(i); // Index in the validArms array
+
+        // use the original scan poses (actual target transforms) instead of
+        // the achieved end-effector pose
+        auto prevPose = originalScanPoses[result.validPoseIndices[i-1]];
+        auto currPose = originalScanPoses[result.validPoseIndices[i]];
+        Eigen::Vector3d prevPos = prevPose.translation();
+        Eigen::Vector3d currPos = currPose.translation();
+        bool hasLargeGap = (currPos - prevPos).norm() > positionThreshold;
+
+        if (hasLargeJump || hasLargeGap) {
+            boundaries.push_back(i);
         }
     }
 

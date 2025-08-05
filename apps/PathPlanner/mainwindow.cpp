@@ -1126,6 +1126,8 @@ void MainWindow::planSTOMPBetweenFirstTwoPoses()
 
         // Run STOMP (regular version)
         StompConfig config;
+        // CRITICAL: Disable internal STOMP parallelization to prevent race conditions on shared matrices
+        config.disableInternalParallelization = true;
         bool success = motionGenerator->performSTOMP(config);
 
         if (success) {

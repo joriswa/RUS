@@ -86,6 +86,15 @@ public:
     bool planTrajectories(bool useHauserForRepositioning = false, bool enableShortcutting = true);
     
     /**
+     * @brief Plan complete scan trajectory sequence with robust fallback handling
+     * @param useHauserForRepositioning Use RRT+Hauser instead of STOMP for repositioning
+     * @param enableShortcutting Apply path shortcutting optimization
+     * @param minSegmentDuration Minimum segment duration in seconds (segments shorter than this are discarded)
+     * @return True if planning succeeded
+     */
+    bool planTrajectoriesRobust(bool useHauserForRepositioning = false, bool enableShortcutting = true, double minSegmentDuration = 4.0);
+    
+    /**
      * @brief Get planned trajectories with contact force flags
      * @return Trajectory segments with contact force indicators
      */
@@ -221,4 +230,42 @@ private:
      * @return True if flat parallelization should be used, false for hierarchical
      */
     bool shouldUseFlatParallelization(size_t numTrajectories) const;
+    
+    /**
+     * @brief Analyze segment durations to filter out short segments
+     * @param validArms Valid robot arm configurations for each pose
+     * @param validSegments Valid trajectory segments 
+     * @param minDuration Minimum duration threshold in seconds
+     * @return Filtered segments that meet duration criteria
+     */
+    std::vector<std::pair<size_t, size_t>> analyzeAndFilterSegments(
+        const std::vector<RobotArm>& validArms,
+        const std::vector<std::pair<size_t, size_t>>& validSegments,
+        double minDuration) const;
+        
+    /**
+     * @brief Estimate duration for a trajectory segment
+     * @param startArm Starting robot configuration
+     * @param endArm Ending robot configuration  
+     * @return Estimated trajectory duration in seconds
+     */
+    double estimateSegmentDuration(const RobotArm& startArm, const RobotArm& endArm) const;
+    
+    /**
+     * @brief Try planning trajectories starting from a specific segment with fallback
+     * @param validArms Valid robot arm configurations
+     * @param filteredSegments Segments that passed duration filtering
+     * @param validPoseIndices Mapping to original pose indices
+     * @param startSegmentIdx Index of segment to start planning from
+     * @param useHauserForRepositioning Use RRT+Hauser instead of STOMP
+     * @param enableShortcutting Apply path shortcutting
+     * @return True if planning succeeded from this starting segment
+     */
+    bool tryPlanningFromSegment(
+        const std::vector<RobotArm>& validArms,
+        const std::vector<std::pair<size_t, size_t>>& filteredSegments,
+        const std::vector<size_t>& validPoseIndices,
+        size_t startSegmentIdx,
+        bool useHauserForRepositioning,
+        bool enableShortcutting);
 };

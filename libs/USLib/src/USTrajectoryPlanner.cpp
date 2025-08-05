@@ -1,4 +1,4 @@
-#include "USTrajectoryPlanner.h"
+#include "USLib/USTrajectoryPlanner.h"
 #include <QDebug>
 #include "TrajectoryLib/Logger.h"
 #include "TrajectoryLib/Planning/PathPlanner.h"
@@ -94,6 +94,16 @@ bool UltrasoundScanTrajectoryPlanner::planTrajectories(bool useHauserForRepositi
 
     _trajectories.clear();
 
+    // Track planning success/failure status for robust partial planning
+    struct PlanningStatus {
+        int totalSegments = 0;
+        int successfulSegments = 0;
+        int totalRepositioning = 0;
+        int successfulRepositioning = 0;
+        std::vector<std::string> failures;
+        std::vector<std::string> successes;
+    } status;
+
     // Special case: single pose request - only return free movement trajectory
     if (_poses.size() == 1) {
         LOG_INFO << "Single pose request: planning direct movement trajectory";
@@ -102,7 +112,8 @@ bool UltrasoundScanTrajectoryPlanner::planTrajectories(bool useHauserForRepositi
         auto &validArms = checkpointResult.validArms;
 
         if (validArms.empty()) {
-            throw std::runtime_error("No valid checkpoint found for single pose request.");
+            LOG_ERROR << "No valid checkpoint found for single pose request";
+            return false;
         }
 
         // Extract target arm configuration
@@ -116,25 +127,30 @@ bool UltrasoundScanTrajectoryPlanner::planTrajectories(bool useHauserForRepositi
         singleDescription.emplace_back("Single pose free movement: current -> pose 0");
 
         std::vector<Trajectory> result;
-        if (useHauserForRepositioning) {
-            result = planTrajectoryBatchHauser(singleRequest, singleDescription, enableShortcutting);
-        } else {
-            result = planTrajectoryBatch(singleRequest, singleDescription, enableShortcutting);
-        }
-
-        if (!result.empty() && !result[0].empty()) {
-            std::vector<MotionGenerator::TrajectoryPoint> trajectoryPoints;
-            trajectoryPoints.reserve(result[0].size());
-
-            for (const auto &point : result[0]) {
-                trajectoryPoints.push_back(point);
+        try {
+            if (useHauserForRepositioning) {
+                result = planTrajectoryBatchHauser(singleRequest, singleDescription, enableShortcutting);
+            } else {
+                result = planTrajectoryBatch(singleRequest, singleDescription, enableShortcutting);
             }
 
-            _trajectories.emplace_back(trajectoryPoints, false); // Free movement = NOT contact force
-            LOG_INFO << "Single pose trajectory: " << trajectoryPoints.size() << " points";
-            return true;
-        } else {
-            LOG_ERROR << "Failed to plan single pose trajectory";
+            if (!result.empty() && !result[0].empty()) {
+                std::vector<MotionGenerator::TrajectoryPoint> trajectoryPoints;
+                trajectoryPoints.reserve(result[0].size());
+
+                for (const auto &point : result[0]) {
+                    trajectoryPoints.push_back(point);
+                }
+
+                _trajectories.emplace_back(trajectoryPoints, false); // Free movement = NOT contact force
+                LOG_INFO << "Single pose trajectory successful: " << trajectoryPoints.size() << " points";
+                return true;
+            } else {
+                LOG_ERROR << "Failed to plan single pose trajectory - trajectory planning returned empty result";
+                return false;
+            }
+        } catch (const std::exception& e) {
+            LOG_ERROR << "Failed to plan single pose trajectory - exception: " << e.what();
             return false;
         }
     }
@@ -201,7 +217,8 @@ bool UltrasoundScanTrajectoryPlanner::planTrajectories(bool useHauserForRepositi
     // Now build the final trajectory sequence in the correct order
     size_t repositioningIndex = 0;
 
-    // 1. Add initial repositioning
+    // 1. Add initial repositioning (handle failure gracefully)
+    status.totalRepositioning++;
     if (repositioningIndex < repositioningResults.size()
         && !repositioningResults[repositioningIndex].empty()) {
         std::vector<MotionGenerator::TrajectoryPoint> trajectoryPoints;
@@ -213,9 +230,12 @@ bool UltrasoundScanTrajectoryPlanner::planTrajectories(bool useHauserForRepositi
 
         _trajectories.emplace_back(trajectoryPoints, false); // repositioning = NOT contact force
         LOG_DEBUG << "Initial repositioning: " << trajectoryPoints.size() << " points";
+        status.successfulRepositioning++;
+        status.successes.push_back("Initial repositioning successful");
     } else {
-        LOG_ERROR << "Initial repositioning failed";
-        return false;
+        LOG_WARNING << "Initial repositioning failed - continuing without initial repositioning";
+        status.failures.push_back("Initial repositioning failed");
+        // Continue anyway - we can start from current position
     }
     repositioningIndex++;
 
@@ -223,56 +243,70 @@ bool UltrasoundScanTrajectoryPlanner::planTrajectories(bool useHauserForRepositi
     for (size_t segIdx = 0; segIdx < validSegments.size(); segIdx++) {
         size_t start = validSegments[segIdx].first;
         size_t end = validSegments[segIdx].second;
+        status.totalSegments++;
 
-        // Add contact force trajectory for this segment
-        if (start == end) {
-            // Single point - add a minimal trajectory for contact force
-            std::vector<MotionGenerator::TrajectoryPoint> singlePoint;
-            MotionGenerator::TrajectoryPoint point;
-            point.time = 0.0;
+        try {
+            // Add contact force trajectory for this segment
+            if (start == end) {
+                // Single point - add a minimal trajectory for contact force
+                std::vector<MotionGenerator::TrajectoryPoint> singlePoint;
+                MotionGenerator::TrajectoryPoint point;
+                point.time = 0.0;
 
-            // Convert Eigen::VectorXd to std::vector<double>
-            auto jointAngles = arms[start].getJointAngles();
-            point.position.resize(jointAngles.size());
-            point.velocity.resize(jointAngles.size());
-            point.acceleration.resize(jointAngles.size());
+                // Convert Eigen::VectorXd to std::vector<double>
+                auto jointAngles = arms[start].getJointAngles();
+                point.position.resize(jointAngles.size());
+                point.velocity.resize(jointAngles.size());
+                point.acceleration.resize(jointAngles.size());
 
-            for (int i = 0; i < jointAngles.size(); ++i) {
-                point.position[i] = jointAngles[i];
-                point.velocity[i] = 0.0;
-                point.acceleration[i] = 0.0;
+                for (int i = 0; i < jointAngles.size(); ++i) {
+                    point.position[i] = jointAngles[i];
+                    point.velocity[i] = 0.0;
+                    point.acceleration[i] = 0.0;
+                }
+
+                singlePoint.push_back(point);
+
+                _trajectories.emplace_back(singlePoint, true); // contact force = TRUE
+                LOG_DEBUG << "Contact force point at valid checkpoint " << start 
+                          << " (original pose " << validPoseIndices[start] << ")";
+                status.successfulSegments++;
+                status.successes.push_back("Contact force segment " + std::to_string(segIdx) + " (single point)");
+            } else {
+                // Multi-point segment - create contact force trajectory through all waypoints
+                std::vector<Eigen::VectorXd> segmentWaypoints;
+                for (size_t i = start; i <= end; i++) {
+                    segmentWaypoints.push_back(arms[i].getJointAngles());
+                }
+
+                // Generate time-optimal trajectory through all waypoints
+                MotionGenerator tempGenerator(*_arm);
+                if (_obstacleTree) {
+                    tempGenerator.setObstacleTree(_obstacleTree);
+                }
+
+                auto trajectoryPoints = tempGenerator.generateTrajectoryFromCheckpoints(
+                    segmentWaypoints);
+
+                _trajectories.emplace_back(trajectoryPoints, true); // contact force = TRUE
+                
+                LOG_DEBUG << "Contact force trajectory: valid poses " << start << "-" << end 
+                          << " (original poses " << validPoseIndices[start] << "-" << validPoseIndices[end] << ") ("
+                          << trajectoryPoints.size() << " points, " << (end - start + 1) << " poses)";
+                status.successfulSegments++;
+                status.successes.push_back("Contact force segment " + std::to_string(segIdx) + 
+                                         " (" + std::to_string(end - start + 1) + " poses)");
             }
-
-            singlePoint.push_back(point);
-
-            _trajectories.emplace_back(singlePoint, true); // contact force = TRUE
-            LOG_DEBUG << "Contact force point at valid checkpoint " << start 
-                      << " (original pose " << validPoseIndices[start] << ")";
-        } else {
-            // Multi-point segment - create contact force trajectory through all waypoints
-            std::vector<Eigen::VectorXd> segmentWaypoints;
-            for (size_t i = start; i <= end; i++) {
-                segmentWaypoints.push_back(arms[i].getJointAngles());
-            }
-
-            // Generate time-optimal trajectory through all waypoints
-            MotionGenerator tempGenerator(*_arm);
-            if (_obstacleTree) {
-                tempGenerator.setObstacleTree(_obstacleTree);
-            }
-
-            auto trajectoryPoints = tempGenerator.generateTrajectoryFromCheckpoints(
-                segmentWaypoints);
-
-            _trajectories.emplace_back(trajectoryPoints, true); // contact force = TRUE
-            
-            LOG_DEBUG << "Contact force trajectory: valid poses " << start << "-" << end 
-                      << " (original poses " << validPoseIndices[start] << "-" << validPoseIndices[end] << ") ("
-                      << trajectoryPoints.size() << " points, " << (end - start + 1) << " poses)";
+        } catch (const std::exception& e) {
+            LOG_WARNING << "Contact force trajectory generation failed for segment " << segIdx 
+                        << " (poses " << start << "-" << end << "): " << e.what() << " - skipping segment";
+            status.failures.push_back("Contact force segment " + std::to_string(segIdx) + " failed: " + e.what());
+            // Continue with next segment instead of failing completely
         }
 
-        // Add inter-segment repositioning if not the last segment
+        // Add inter-segment repositioning if not the last segment (handle failure gracefully)
         if (segIdx + 1 < validSegments.size()) {
+            status.totalRepositioning++;
             if (repositioningIndex < repositioningResults.size()
                 && !repositioningResults[repositioningIndex].empty()) {
                 std::vector<MotionGenerator::TrajectoryPoint> trajectoryPoints;
@@ -290,15 +324,45 @@ bool UltrasoundScanTrajectoryPlanner::planTrajectories(bool useHauserForRepositi
                 LOG_DEBUG << "Inter-segment repositioning " << currentEnd << "-" << nextStart
                           << " (original poses " << validPoseIndices[currentEnd] << "-" << validPoseIndices[nextStart] << ")"
                           << ": " << trajectoryPoints.size() << " points";
+                status.successfulRepositioning++;
+                status.successes.push_back("Inter-segment repositioning " + std::to_string(segIdx) + " successful");
             } else {
-                LOG_ERROR << "Inter-segment repositioning failed for segment " << segIdx;
-                return false;
+                LOG_WARNING << "Inter-segment repositioning failed for segment " << segIdx << " - skipping repositioning";
+                status.failures.push_back("Inter-segment repositioning " + std::to_string(segIdx) + " failed");
+                // Continue without this repositioning trajectory instead of failing completely
             }
             repositioningIndex++;
         }
     }
 
-    LOG_INFO << "Generated " << _trajectories.size() << " trajectories";
+    // Log detailed planning status
+    LOG_INFO << "Planning Status Summary:";
+    LOG_INFO << "  Contact force segments: " << status.successfulSegments << "/" << status.totalSegments;
+    LOG_INFO << "  Repositioning trajectories: " << status.successfulRepositioning << "/" << status.totalRepositioning;
+    
+    if (!status.successes.empty()) {
+        LOG_INFO << "  Successes:";
+        for (const auto& success : status.successes) {
+            LOG_INFO << "    - " << success;
+        }
+    }
+    
+    if (!status.failures.empty()) {
+        LOG_WARNING << "  Failures:";
+        for (const auto& failure : status.failures) {
+            LOG_WARNING << "    - " << failure;
+        }
+    }
+
+    // Only fail if NO contact force segments could be planned (no useful scanning work possible)
+    if (status.successfulSegments == 0) {
+        LOG_ERROR << "Critical failure: No contact force segments could be planned - no scanning work possible";
+        return false;
+    }
+
+    LOG_INFO << "Generated " << _trajectories.size() << " trajectories"
+             << " (" << status.successfulSegments << " contact force segments + "
+             << status.successfulRepositioning << " repositioning trajectories)";
 
     // Check and fix discontinuities between trajectory segments
     bool discontinuitiesFixed = fixTrajectoryDiscontinuities();
@@ -309,6 +373,85 @@ bool UltrasoundScanTrajectoryPlanner::planTrajectories(bool useHauserForRepositi
     printSegmentTimes();
 
     return true;
+}
+
+bool UltrasoundScanTrajectoryPlanner::planTrajectoriesRobust(bool useHauserForRepositioning,
+                                                            bool enableShortcutting,
+                                                            double minSegmentDuration)
+{
+    if (_environment.empty()) {
+        throw std::runtime_error("Environment string is not populated.");
+    }
+
+    if (_currentJoints.size() != 7) {
+        throw std::runtime_error("Current joints are not populated or are not = 7.");
+    }
+
+    if (_poses.empty()) {
+        throw std::runtime_error("Target poses are not populated.");
+    }
+
+    _trajectories.clear();
+
+    LOG_INFO << "Starting robust trajectory planning with " << _poses.size() << " poses";
+    LOG_INFO << "Minimum segment duration: " << minSegmentDuration << "s";
+
+    // Special case: single pose request
+    if (_poses.size() == 1) {
+        LOG_INFO << "Single pose request: planning direct movement trajectory";
+        return planTrajectories(useHauserForRepositioning, enableShortcutting);
+    }
+
+    auto checkpointResult = _pathPlanner->planCheckpoints(_poses, _currentJoints);
+    auto &validArms = checkpointResult.validArms;
+    auto &validSegments = checkpointResult.validSegments;
+    auto &validPoseIndices = checkpointResult.validPoseIndices;
+
+    if (validArms.empty()) {
+        throw std::runtime_error("No valid checkpoint found to start trajectory planning.");
+    }
+    
+    LOG_INFO << "Found " << validArms.size() << " valid poses out of " << checkpointResult.totalOriginalPoses << " total poses";
+
+    // Step 1: Analyze and filter segments by duration
+    auto filteredSegments = analyzeAndFilterSegments(validArms, validSegments, minSegmentDuration);
+    
+    if (filteredSegments.empty()) {
+        LOG_WARNING << "No segments meet minimum duration criteria (" << minSegmentDuration << "s) - falling back to regular planning";
+        return planTrajectories(useHauserForRepositioning, enableShortcutting);
+    }
+    
+    LOG_INFO << "Filtered to " << filteredSegments.size() << " segments (from " << validSegments.size() << ") that meet duration criteria";
+
+    // Step 2: Try planning starting from each viable segment until one succeeds
+    for (size_t startIdx = 0; startIdx < filteredSegments.size(); ++startIdx) {
+        LOG_INFO << "Attempting planning starting from segment " << startIdx << " (poses " 
+                 << filteredSegments[startIdx].first << "-" << filteredSegments[startIdx].second << ")";
+        
+        bool success = tryPlanningFromSegment(validArms, filteredSegments, validPoseIndices, 
+                                            startIdx, useHauserForRepositioning, enableShortcutting);
+        
+        if (success) {
+            LOG_INFO << "Robust planning succeeded starting from segment " << startIdx;
+            
+            // Check and fix discontinuities between trajectory segments
+            bool discontinuitiesFixed = fixTrajectoryDiscontinuities();
+            if (discontinuitiesFixed) {
+                LOG_INFO << "Trajectory discontinuities corrected";
+            }
+            
+            printSegmentTimes();
+            return true;
+        } else {
+            LOG_WARNING << "Planning failed starting from segment " << startIdx << " - trying next segment";
+        }
+    }
+
+    LOG_ERROR << "Robust planning failed - could not find viable starting segment";
+    LOG_INFO << "Falling back to regular planning as last resort";
+    
+    // Last resort: try regular planning
+    return planTrajectories(useHauserForRepositioning, enableShortcutting);
 }
 
 std::vector<std::pair<std::vector<MotionGenerator::TrajectoryPoint>, bool>>
@@ -1094,4 +1237,286 @@ void UltrasoundScanTrajectoryPlanner::printSegmentTimes() const
     LOG_INFO << "=================================";
     LOG_INFO << "Total trajectory duration: " << std::fixed << std::setprecision(3) << totalDuration
              << "s across " << _trajectories.size() << " segments";
+}
+
+std::vector<std::pair<size_t, size_t>> UltrasoundScanTrajectoryPlanner::analyzeAndFilterSegments(
+    const std::vector<RobotArm>& validArms,
+    const std::vector<std::pair<size_t, size_t>>& validSegments,
+    double minDuration) const
+{
+    std::vector<std::pair<size_t, size_t>> filteredSegments;
+    
+    LOG_DEBUG << "Analyzing " << validSegments.size() << " segments for duration filtering";
+    
+    for (const auto& segment : validSegments) {
+        size_t startIdx = segment.first;
+        size_t endIdx = segment.second;
+        
+        double segmentDuration = 0.0;
+        
+        if (startIdx == endIdx) {
+            // Single point segment - assign minimal duration
+            segmentDuration = 0.1; // 100ms for single point contact
+            LOG_DEBUG << "Segment " << startIdx << "-" << endIdx << ": single point, duration = " 
+                      << segmentDuration << "s";
+        } else {
+            // Multi-point segment - estimate duration based on joint movements
+            double totalDuration = 0.0;
+            
+            for (size_t i = startIdx; i < endIdx; ++i) {
+                double stepDuration = estimateSegmentDuration(validArms[i], validArms[i + 1]);
+                totalDuration += stepDuration;
+            }
+            
+            segmentDuration = totalDuration;
+            LOG_DEBUG << "Segment " << startIdx << "-" << endIdx << ": " << (endIdx - startIdx + 1) 
+                      << " poses, estimated duration = " << segmentDuration << "s";
+        }
+        
+        if (segmentDuration >= minDuration) {
+            filteredSegments.push_back(segment);
+            LOG_DEBUG << "Segment " << startIdx << "-" << endIdx << " ACCEPTED (duration: " 
+                      << segmentDuration << "s >= " << minDuration << "s)";
+        } else {
+            LOG_DEBUG << "Segment " << startIdx << "-" << endIdx << " REJECTED (duration: " 
+                      << segmentDuration << "s < " << minDuration << "s)";
+        }
+    }
+    
+    return filteredSegments;
+}
+
+double UltrasoundScanTrajectoryPlanner::estimateSegmentDuration(const RobotArm& startArm, const RobotArm& endArm) const
+{
+    // Estimate trajectory duration based on joint angle differences and velocity limits
+    auto startJoints = startArm.getJointAngles();
+    auto endJoints = endArm.getJointAngles();
+    
+    if (startJoints.size() != endJoints.size()) {
+        LOG_WARNING << "Joint size mismatch in duration estimation";
+        return 1.0; // Default 1 second
+    }
+    
+    // Conservative velocity limits for duration estimation (rad/s)
+    std::vector<double> maxVelocities = {1.5, 1.5, 1.5, 1.5, 2.0, 2.0, 2.0}; // Conservative joint limits
+    
+    double maxDuration = 0.0;
+    
+    for (size_t i = 0; i < startJoints.size(); ++i) {
+        double jointDiff = std::abs(endJoints[i] - startJoints[i]);
+        double jointDuration = jointDiff / maxVelocities[i];
+        maxDuration = std::max(maxDuration, jointDuration);
+    }
+    
+    // Add safety margin and minimum contact time
+    double estimatedDuration = std::max(0.5, maxDuration * 1.5); // 1.5x safety factor, minimum 0.5s
+    
+    return estimatedDuration;
+}
+
+bool UltrasoundScanTrajectoryPlanner::tryPlanningFromSegment(
+    const std::vector<RobotArm>& validArms,
+    const std::vector<std::pair<size_t, size_t>>& filteredSegments,
+    const std::vector<size_t>& validPoseIndices,
+    size_t startSegmentIdx,
+    bool useHauserForRepositioning,
+    bool enableShortcutting)
+{
+    // Clear previous results
+    _trajectories.clear();
+    
+    struct PlanningStatus {
+        int totalSegments = 0;
+        int successfulSegments = 0;
+        int totalRepositioning = 0;
+        int successfulRepositioning = 0;
+        std::vector<std::string> failures;
+        std::vector<std::string> successes;
+    } status;
+
+    try {
+        // Build repositioning requests starting from the specified segment
+        std::vector<std::pair<Eigen::VectorXd, Eigen::VectorXd>> repositioningRequests;
+        std::vector<std::string> repositioningDescriptions;
+
+        // Add initial repositioning trajectory (current joints -> first segment start)
+        size_t firstSegmentStart = filteredSegments[startSegmentIdx].first;
+        repositioningRequests.emplace_back(_currentJoints, validArms[firstSegmentStart].getJointAngles());
+        repositioningDescriptions.emplace_back("Robust initial repositioning: current -> segment " 
+                                               + std::to_string(startSegmentIdx) + " start (pose " 
+                                               + std::to_string(validPoseIndices[firstSegmentStart]) + ")");
+
+        // Add inter-segment repositioning trajectories for remaining segments
+        for (size_t segIdx = startSegmentIdx; segIdx + 1 < filteredSegments.size(); segIdx++) {
+            size_t currentEnd = filteredSegments[segIdx].second;
+            size_t nextStart = filteredSegments[segIdx + 1].first;
+
+            repositioningRequests.emplace_back(validArms[currentEnd].getJointAngles(),
+                                               validArms[nextStart].getJointAngles());
+            repositioningDescriptions.emplace_back("Robust inter-segment repositioning: segment " 
+                                                   + std::to_string(segIdx) + " -> segment " 
+                                                   + std::to_string(segIdx + 1) + " (poses "
+                                                   + std::to_string(validPoseIndices[currentEnd]) + " -> "
+                                                   + std::to_string(validPoseIndices[nextStart]) + ")");
+        }
+
+        LOG_DEBUG << "Planning " << repositioningRequests.size() << " repositioning trajectories for robust strategy";
+
+        // Plan repositioning trajectories with fallback
+        std::vector<Trajectory> repositioningResults;
+        try {
+            if (useHauserForRepositioning) {
+                repositioningResults = planTrajectoryBatchHauser(repositioningRequests,
+                                                                 repositioningDescriptions,
+                                                                 enableShortcutting);
+            } else {
+                repositioningResults = planTrajectoryBatch(repositioningRequests,
+                                                           repositioningDescriptions,
+                                                           enableShortcutting);
+            }
+        } catch (const std::exception& e) {
+            LOG_WARNING << "Repositioning planning failed: " << e.what();
+            return false;
+        }
+
+        // Build final trajectory sequence
+        size_t repositioningIndex = 0;
+
+        // 1. Add initial repositioning with failure handling
+        status.totalRepositioning++;
+        if (repositioningIndex < repositioningResults.size() && !repositioningResults[repositioningIndex].empty()) {
+            std::vector<MotionGenerator::TrajectoryPoint> trajectoryPoints;
+            trajectoryPoints.reserve(repositioningResults[repositioningIndex].size());
+
+            for (const auto &point : repositioningResults[repositioningIndex]) {
+                trajectoryPoints.push_back(point);
+            }
+
+            _trajectories.emplace_back(trajectoryPoints, false); // repositioning = NOT contact force
+            LOG_DEBUG << "Robust initial repositioning: " << trajectoryPoints.size() << " points";
+            status.successfulRepositioning++;
+            status.successes.push_back("Initial repositioning to segment " + std::to_string(startSegmentIdx));
+        } else {
+            LOG_WARNING << "Initial repositioning failed for segment " << startSegmentIdx;
+            status.failures.push_back("Initial repositioning to segment " + std::to_string(startSegmentIdx));
+            return false; // Critical failure - can't reach starting segment
+        }
+        repositioningIndex++;
+
+        // 2. Add contact force trajectories for filtered segments starting from startSegmentIdx
+        for (size_t segIdx = startSegmentIdx; segIdx < filteredSegments.size(); segIdx++) {
+            size_t start = filteredSegments[segIdx].first;
+            size_t end = filteredSegments[segIdx].second;
+            status.totalSegments++;
+
+            try {
+                // Add contact force trajectory for this segment
+                if (start == end) {
+                    // Single point - add minimal trajectory for contact force
+                    std::vector<MotionGenerator::TrajectoryPoint> singlePoint;
+                    MotionGenerator::TrajectoryPoint point;
+                    point.time = 0.0;
+
+                    auto jointAngles = validArms[start].getJointAngles();
+                    point.position.resize(jointAngles.size());
+                    point.velocity.resize(jointAngles.size());
+                    point.acceleration.resize(jointAngles.size());
+
+                    for (int i = 0; i < jointAngles.size(); ++i) {
+                        point.position[i] = jointAngles[i];
+                        point.velocity[i] = 0.0;
+                        point.acceleration[i] = 0.0;
+                    }
+
+                    singlePoint.push_back(point);
+                    _trajectories.emplace_back(singlePoint, true); // contact force = TRUE
+                    LOG_DEBUG << "Robust contact force point at pose " << start 
+                              << " (original pose " << validPoseIndices[start] << ")";
+                    status.successfulSegments++;
+                    status.successes.push_back("Contact segment " + std::to_string(segIdx) + " (single point)");
+                } else {
+                    // Multi-point segment - create contact force trajectory through all waypoints
+                    std::vector<Eigen::VectorXd> segmentWaypoints;
+                    for (size_t i = start; i <= end; i++) {
+                        segmentWaypoints.push_back(validArms[i].getJointAngles());
+                    }
+
+                    // Generate time-optimal trajectory through all waypoints
+                    MotionGenerator tempGenerator(*_arm);
+                    if (_obstacleTree) {
+                        tempGenerator.setObstacleTree(_obstacleTree);
+                    }
+
+                    auto trajectoryPoints = tempGenerator.generateTrajectoryFromCheckpoints(segmentWaypoints);
+                    _trajectories.emplace_back(trajectoryPoints, true); // contact force = TRUE
+                    
+                    LOG_DEBUG << "Robust contact force trajectory: poses " << start << "-" << end 
+                              << " (original poses " << validPoseIndices[start] << "-" << validPoseIndices[end] << ") ("
+                              << trajectoryPoints.size() << " points)";
+                    status.successfulSegments++;
+                    status.successes.push_back("Contact segment " + std::to_string(segIdx) + 
+                                               " (" + std::to_string(end - start + 1) + " poses)");
+                }
+            } catch (const std::exception& e) {
+                LOG_WARNING << "Contact force trajectory failed for segment " << segIdx 
+                            << " (poses " << start << "-" << end << "): " << e.what() << " - continuing with next segment";
+                status.failures.push_back("Contact segment " + std::to_string(segIdx) + " failed: " + e.what());
+                // Continue with next segment instead of failing completely
+            }
+
+            // Add inter-segment repositioning if not the last segment
+            if (segIdx + 1 < filteredSegments.size()) {
+                status.totalRepositioning++;
+                if (repositioningIndex < repositioningResults.size() && !repositioningResults[repositioningIndex].empty()) {
+                    std::vector<MotionGenerator::TrajectoryPoint> trajectoryPoints;
+                    trajectoryPoints.reserve(repositioningResults[repositioningIndex].size());
+
+                    for (const auto &point : repositioningResults[repositioningIndex]) {
+                        trajectoryPoints.push_back(point);
+                    }
+
+                    _trajectories.emplace_back(trajectoryPoints, false); // repositioning = NOT contact force
+                    size_t currentEnd = filteredSegments[segIdx].second;
+                    size_t nextStart = filteredSegments[segIdx + 1].first;
+                    LOG_DEBUG << "Robust inter-segment repositioning " << currentEnd << "-" << nextStart
+                              << " (original poses " << validPoseIndices[currentEnd] << "-" << validPoseIndices[nextStart] << ")"
+                              << ": " << trajectoryPoints.size() << " points";
+                    status.successfulRepositioning++;
+                    status.successes.push_back("Inter-segment repositioning " + std::to_string(segIdx));
+                } else {
+                    LOG_WARNING << "Inter-segment repositioning failed for segment " << segIdx << " - skipping";
+                    status.failures.push_back("Inter-segment repositioning " + std::to_string(segIdx) + " failed");
+                    // Continue without this repositioning - may cause discontinuities but better than total failure
+                }
+                repositioningIndex++;
+            }
+        }
+
+        // Log planning status
+        LOG_INFO << "Robust Planning Status (starting from segment " << startSegmentIdx << "):";
+        LOG_INFO << "  Contact force segments: " << status.successfulSegments << "/" << status.totalSegments;
+        LOG_INFO << "  Repositioning trajectories: " << status.successfulRepositioning << "/" << status.totalRepositioning;
+        
+        if (!status.failures.empty()) {
+            LOG_DEBUG << "  Failures:";
+            for (const auto& failure : status.failures) {
+                LOG_DEBUG << "    - " << failure;
+            }
+        }
+
+        // Success if we have at least one contact force segment
+        bool success = (status.successfulSegments > 0);
+        
+        if (success) {
+            LOG_INFO << "Robust planning succeeded from segment " << startSegmentIdx 
+                     << " (" << status.successfulSegments << " contact segments, " 
+                     << status.successfulRepositioning << " repositioning)";
+        }
+        
+        return success;
+
+    } catch (const std::exception& e) {
+        LOG_ERROR << "Exception in robust planning from segment " << startSegmentIdx << ": " << e.what();
+        return false;
+    }
 }

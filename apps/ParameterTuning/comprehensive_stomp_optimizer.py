@@ -71,7 +71,7 @@ class ComprehensiveSTOMPOptimizer:
             'temperature': trial.suggest_float('temperature', 0.1, 4.0),
             'learning_rate': 1.0,  # Fixed as requested
             'max_iterations': trial.suggest_int('max_iterations', 50, 500),
-            'N': trial.suggest_int('N', 30, 120),
+            'dt': trial.suggest_float('dt', 0.05, 0.2),  # Time step discretization - smaller = finer resolution
             'num_noisy_trajectories': trial.suggest_int('num_noisy_trajectories', 3, 15),
             'num_best_samples': trial.suggest_int('num_best_samples', 2, 10),
             # Optimize cost weights - these directly influence STOMP behavior

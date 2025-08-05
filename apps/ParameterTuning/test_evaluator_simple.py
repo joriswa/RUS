@@ -40,7 +40,7 @@ stomp:
   temperature: {stomp_params['temperature']}
   learning_rate: {stomp_params['learning_rate']}
   max_iterations: {stomp_params['max_iterations']}
-  N: {stomp_params['N']}
+  dt: {stomp_params['dt']}
   num_noisy_trajectories: {stomp_params['num_noisy_trajectories']}
   num_best_samples: {stomp_params['num_best_samples']}
   obstacle_cost_weight: {stomp_params['obstacle_cost_weight']}
