@@ -1,41 +1,40 @@
-#include "USLib/planning_node.h"
-#include "TrajectoryLib/Logger.h"
-#include <sstream>
-#include <iomanip>
+#include "planning_node.h"
+#include "GeometryLib/BVHTree.h"
 
+// ============================================================================
 // ObstacleVisualizer Implementation
-ObstacleVisualizer::ObstacleVisualizer(ros::NodeHandle& nh, 
-                                     const std::string& topic_name,
-                                     const std::string& frame_id)
-    : _nh(nh), _frame_id(frame_id), _marker_id_counter(0), _publish_rate(1.0)
+// ============================================================================
+
+ObstacleVisualizer::ObstacleVisualizer(ros::NodeHandle &nh,
+                                       const std::string &topic_name,
+                                       const std::string &frame_id)
+    : _nh(nh), _frame_id(frame_id), _marker_id_counter(0), _publish_rate(10.0), _leaf_color(createColor(1.0, 0.0, 0.0, 0.7)) // Red for obstacles
+      ,
+      _internal_color(createColor(0.0, 0.0, 1.0, 0.3)) // Blue for BVH nodes
 {
     _marker_pub = _nh.advertise<visualization_msgs::MarkerArray>(topic_name, 1, true);
-    
-    // Set default colors
-    _leaf_color = createColor(1.0f, 0.0f, 0.0f, 0.7f);      // Red for leaf nodes
-    _internal_color = createColor(0.0f, 0.0f, 1.0f, 0.3f);  // Blue for internal nodes
-    
-    LOG_INFO << "ObstacleVisualizer initialized with topic: " << topic_name;
+    _publish_timer = _nh.createTimer(ros::Duration(1.0 / _publish_rate),
+                                     &ObstacleVisualizer::timerCallback, this);
+
+    ROS_INFO("ObstacleVisualizer initialized. Publishing to topic: %s", topic_name.c_str());
 }
 
 void ObstacleVisualizer::setObstacleTree(std::shared_ptr<BVHTree> obstacle_tree)
 {
     _obstacle_tree = obstacle_tree;
-    LOG_INFO << "Obstacle tree set for visualization";
+    ROS_INFO("Obstacle tree set for visualization");
 }
 
 void ObstacleVisualizer::setPublishRate(double rate)
 {
     _publish_rate = rate;
-    if (_publish_timer.isValid()) {
-        _publish_timer.stop();
-        _publish_timer = _nh.createTimer(ros::Duration(1.0 / _publish_rate), 
-                                        &ObstacleVisualizer::timerCallback, this);
-    }
+    _publish_timer.stop();
+    _publish_timer = _nh.createTimer(ros::Duration(1.0 / _publish_rate),
+                                     &ObstacleVisualizer::timerCallback, this);
 }
 
-void ObstacleVisualizer::setColors(const std_msgs::ColorRGBA& leaf_color, 
-                                  const std_msgs::ColorRGBA& internal_color)
+void ObstacleVisualizer::setColors(const std_msgs::ColorRGBA &leaf_color,
+                                   const std_msgs::ColorRGBA &internal_color)
 {
     _leaf_color = leaf_color;
     _internal_color = internal_color;
@@ -44,6 +43,34 @@ void ObstacleVisualizer::setColors(const std_msgs::ColorRGBA& leaf_color,
 void ObstacleVisualizer::setShowInternalNodes(bool show_internal)
 {
     _show_internal_nodes = show_internal;
+}
+
+void ObstacleVisualizer::publishObstacles()
+{
+    if (!_obstacle_tree)
+    {
+        ROS_WARN_THROTTLE(5.0, "No obstacle tree set. Cannot publish markers.");
+        return;
+    }
+
+    visualization_msgs::MarkerArray marker_array;
+    _marker_id_counter = 0;
+
+    // Clear previous markers
+    clearMarkers(marker_array);
+
+    // Add obstacle boxes to marker array
+    addObstacleBoxes(marker_array);
+
+    // Publish marker array
+    _marker_pub.publish(marker_array);
+
+    ROS_DEBUG("Published %zu obstacle markers", marker_array.markers.size());
+}
+
+void ObstacleVisualizer::timerCallback(const ros::TimerEvent &event)
+{
+    publishObstacles();
 }
 
 std_msgs::ColorRGBA ObstacleVisualizer::createColor(float r, float g, float b, float a)
@@ -56,315 +83,377 @@ std_msgs::ColorRGBA ObstacleVisualizer::createColor(float r, float g, float b, f
     return color;
 }
 
-void ObstacleVisualizer::publishObstacles()
-{
-    if (!_obstacle_tree) {
-        LOG_WARNING << "No obstacle tree available for visualization";
-        return;
-    }
-    
-    visualization_msgs::MarkerArray marker_array;
-    clearMarkers(marker_array);
-    addObstacleBoxes(marker_array);
-    
-    _marker_pub.publish(marker_array);
-    LOG_DEBUG << "Published " << marker_array.markers.size() << " obstacle markers";
-}
-
-void ObstacleVisualizer::timerCallback(const ros::TimerEvent& event)
-{
-    publishObstacles();
-}
-
-void ObstacleVisualizer::clearMarkers(visualization_msgs::MarkerArray& marker_array)
+void ObstacleVisualizer::clearMarkers(visualization_msgs::MarkerArray &marker_array)
 {
     visualization_msgs::Marker clear_marker;
     clear_marker.header.frame_id = _frame_id;
     clear_marker.header.stamp = ros::Time::now();
+    clear_marker.ns = "obstacles";
+    clear_marker.id = 0;
     clear_marker.action = visualization_msgs::Marker::DELETEALL;
+
     marker_array.markers.push_back(clear_marker);
-    _marker_id_counter = 0;
 }
 
-void ObstacleVisualizer::addObstacleBoxes(visualization_msgs::MarkerArray& marker_array)
+void ObstacleVisualizer::addObstacleBoxes(visualization_msgs::MarkerArray &marker_array)
 {
-    if (_obstacle_tree && _obstacle_tree->getRoot()) {
-        addObstacleBoxesRecursive(_obstacle_tree->getRoot(), marker_array);
-    }
-}
-
-void ObstacleVisualizer::addObstacleBoxesRecursive(const BVHNode* node, 
-                                                  visualization_msgs::MarkerArray& marker_array)
-{
-    if (!node) return;
-    
-    bool is_leaf = (node->left == nullptr && node->right == nullptr);
-    
-    // Only visualize leaf nodes by default, unless internal nodes are explicitly enabled
-    if (!is_leaf && !_show_internal_nodes) {
-        addObstacleBoxesRecursive(node->left, marker_array);
-        addObstacleBoxesRecursive(node->right, marker_array);
+    if (!_obstacle_tree)
+    {
         return;
     }
-    
-    // Create marker for this node
-    Eigen::Vector3d center = node->box.center();
-    Eigen::Vector3d half_dims = node->box.sizes() * 0.5;
-    Eigen::Matrix3d axes = Eigen::Matrix3d::Identity(); // Assuming axis-aligned boxes
-    
-    visualization_msgs::Marker marker = createBoxMarker(center, half_dims, axes, is_leaf);
-    marker_array.markers.push_back(marker);
-    
-    // Recursively process children for internal nodes
-    if (!is_leaf) {
-        addObstacleBoxesRecursive(node->left, marker_array);
-        addObstacleBoxesRecursive(node->right, marker_array);
-    }
+
+    addObstacleBoxesRecursive(_obstacle_tree->getRoot(), marker_array);
 }
 
-visualization_msgs::Marker ObstacleVisualizer::createBoxMarker(const Eigen::Vector3d& center,
-                                                              const Eigen::Vector3d& half_dims,
-                                                              const Eigen::Matrix3d& axes,
-                                                              bool is_leaf)
+void ObstacleVisualizer::addObstacleBoxesRecursive(const BVHNode *node, visualization_msgs::MarkerArray &marker_array)
+{
+    if (!node)
+    {
+        return;
+    }
+
+    // Check if this is a leaf node (contains actual obstacles)
+    bool is_leaf = !node->obstacles.empty();
+
+    if (is_leaf)
+    {
+        for (const auto &obstacle : node->obstacles)
+        {
+            if (obstacle)
+            {
+                if (auto box_obstacle = std::dynamic_pointer_cast<BoxObstacle>(obstacle))
+                {
+                    Eigen::Affine3d transform = box_obstacle->getTransform();
+                    Eigen::Vector3d scale = box_obstacle->getScale();
+
+                    Eigen::Vector3d center = transform.translation();
+
+                    Eigen::Matrix3d axes = transform.rotation();
+
+                    Eigen::Vector3d half_dims = scale * 0.5;
+
+                    visualization_msgs::Marker marker = createBoxMarker(center, half_dims, axes, true);
+                    marker_array.markers.push_back(marker);
+                }
+                else
+                {
+                    Eigen::AlignedBox3d bbox = obstacle->getBoundingBox();
+                    Eigen::Vector3d center = bbox.center();
+                    Eigen::Vector3d half_dims = bbox.sizes() * 0.5;
+                    Eigen::Matrix3d axes = Eigen::Matrix3d::Identity();
+
+                    visualization_msgs::Marker marker = createBoxMarker(center, half_dims, axes, true);
+                    marker_array.markers.push_back(marker);
+                }
+            }
+        }
+    }
+    else if (_show_internal_nodes)
+    {
+        Eigen::Vector3d center = node->boundingBox.center();
+        Eigen::Vector3d half_dims = node->boundingBox.sizes() * 0.5;
+        Eigen::Matrix3d axes = Eigen::Matrix3d::Identity();
+
+        visualization_msgs::Marker marker = createBoxMarker(center, half_dims, axes, false);
+        marker_array.markers.push_back(marker);
+    }
+
+    addObstacleBoxesRecursive(node->left.get(), marker_array);
+    addObstacleBoxesRecursive(node->right.get(), marker_array);
+}
+
+visualization_msgs::Marker ObstacleVisualizer::createBoxMarker(const Eigen::Vector3d &center,
+                                                               const Eigen::Vector3d &half_dims,
+                                                               const Eigen::Matrix3d &axes,
+                                                               bool is_leaf)
 {
     visualization_msgs::Marker marker;
+
+    // Header
     marker.header.frame_id = _frame_id;
     marker.header.stamp = ros::Time::now();
+
+    // Namespace and ID
+    marker.ns = is_leaf ? "obstacle_boxes" : "bvh_internal_nodes";
     marker.id = _marker_id_counter++;
+
+    // Marker type and action
     marker.type = visualization_msgs::Marker::CUBE;
     marker.action = visualization_msgs::Marker::ADD;
-    
+
+    // Position
     marker.pose.position.x = center.x();
     marker.pose.position.y = center.y();
     marker.pose.position.z = center.z();
-    marker.pose.orientation.w = 1.0; // Identity quaternion for axis-aligned boxes
-    
-    marker.scale.x = half_dims.x() * 2.0;
-    marker.scale.y = half_dims.y() * 2.0;
-    marker.scale.z = half_dims.z() * 2.0;
-    
+
+    // Orientation from rotation matrix
+    Eigen::Quaterniond quat(axes);
+    marker.pose.orientation.x = quat.x();
+    marker.pose.orientation.y = quat.y();
+    marker.pose.orientation.z = quat.z();
+    marker.pose.orientation.w = quat.w();
+
+    // Scale (full dimensions, not half)
+    marker.scale.x = 2.0 * half_dims.x();
+    marker.scale.y = 2.0 * half_dims.y();
+    marker.scale.z = 2.0 * half_dims.z();
+
+    // Color
     marker.color = is_leaf ? _leaf_color : _internal_color;
-    
+
+    // Lifetime (0 means forever until explicitly deleted)
+    marker.lifetime = ros::Duration(0);
+
     return marker;
 }
 
+// ============================================================================
 // PlanningInterface Implementation
-PlanningInterface::PlanningInterface(ros::NodeHandle &nh) : _nh(nh), _usPlanner(nullptr)
+// ============================================================================
+
+PlanningInterface::PlanningInterface(ros::NodeHandle &nh) : _nh(nh)
 {
-    LOG_INFO << "Initializing PlanningInterface";
+    ROS_INFO("PlanningInterface: Constructor initialized with obstacle visualization!");
 }
 
 PlanningInterface::~PlanningInterface()
 {
-    if (_usPlanner) {
-        delete _usPlanner;
-        _usPlanner = nullptr;
-    }
-    LOG_INFO << "PlanningInterface destroyed";
+    delete _usPlanner;
+    ROS_INFO("PlanningInterface: Destructor called");
 }
 
 bool PlanningInterface::initialize()
 {
-    try {
-        // Get parameters from ROS parameter server
-        _nh.param<std::string>("robot_description_path", _robot_description_path, "");
-        _nh.param<std::string>("env_description_path", _env_description_path, "");
-        
-        if (_robot_description_path.empty()) {
-            LOG_ERROR << "robot_description_path parameter not set";
-            return false;
+    // Load parameters from ROS parameter server
+    if (!_nh.getParam("robot_description_path", _robot_description_path))
+    {
+        ROS_WARN("Parameter 'robot_description_path' not found, using default");
+        _robot_description_path = "/home/lovis/WorkspaceRUS/src/path_planning_space/res/panda.urdf";
+    }
+
+    if (!_nh.getParam("environment_path", _env_description_path))
+    {
+        ROS_WARN("Parameter 'environment_path' not found, using default");
+        _env_description_path = "/home/lovis/WorkspaceRUS/src/path_planning_space/res/obstacles.xml";
+    }
+
+    // Initialize trajectory planner
+    std::vector<double> default_joints = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+    _usPlanner = new UltrasoundScanTrajectoryPlanner(_robot_description_path);
+    _usPlanner->setEnvironment(_env_description_path);
+
+    // Setup obstacle visualization
+    setupObstacleVisualization();
+
+    // Register services
+    _scan_sequence_service = _nh.advertiseService(
+        "/scan_pose_sequence",
+        &PlanningInterface::scanPoseSequenceCallback,
+        this);
+
+    _environment_update_service = _nh.advertiseService(
+        "/environment_update",
+        &PlanningInterface::updateEnvironmentCallback,
+        this);
+
+    _visualization_service = _nh.advertiseService(
+        "/visualize_obstacles",
+        &PlanningInterface::visualizeObstaclesCallback,
+        this);
+
+    ROS_INFO("PlanningInterface: Services registered and initialization complete");
+    ROS_INFO("Available services:");
+    ROS_INFO("  - /scan_pose_sequence: Plan trajectory sequence");
+    ROS_INFO("  - /environment_update: Update environment");
+    ROS_INFO("  - /visualize_obstacles: Trigger obstacle visualization");
+
+    return true;
+}
+
+void PlanningInterface::setupObstacleVisualization()
+{
+    // Initialize obstacle visualizer
+    _obstacle_visualizer = std::make_unique<ObstacleVisualizer>(
+        _nh, "planning_obstacles", "world");
+
+    // Configure visualization
+    _obstacle_visualizer->setPublishRate(2.0);         // 2 Hz for planning context
+    _obstacle_visualizer->setShowInternalNodes(false); // Only show actual obstacles
+
+    // Set custom colors
+    std_msgs::ColorRGBA obstacle_color = _obstacle_visualizer->createColor(0.8, 0.2, 0.2, 0.8); // Red
+    std_msgs::ColorRGBA bvh_color = _obstacle_visualizer->createColor(0.2, 0.2, 0.8, 0.3);      // Blue
+    _obstacle_visualizer->setColors(obstacle_color, bvh_color);
+
+    // Update visualization with current environment
+    updateObstacleVisualization();
+
+    ROS_INFO("Obstacle visualization setup complete");
+}
+
+void PlanningInterface::updateObstacleVisualization()
+{
+    if (_usPlanner && _obstacle_visualizer)
+    {
+        // Get obstacle tree from trajectory planner
+        auto obstacle_tree = _usPlanner->getObstacleTree();
+        if (obstacle_tree)
+        {
+            _obstacle_visualizer->setObstacleTree(obstacle_tree);
+            ROS_INFO("Updated obstacle visualization with environment data");
         }
-        
-        // Initialize joint names (assuming 7-DOF robot)
-        _joint_names = {"panda_joint1", "panda_joint2", "panda_joint3", "panda_joint4", 
-                       "panda_joint5", "panda_joint6", "panda_joint7"};
-        
-        // Initialize USTrajectoryPlanner
-        std::string environment_string = _env_description_path.empty() ? 
-                                       "<?xml version=\"1.0\"?><environment></environment>" : 
-                                       _env_description_path;
-        
-        _usPlanner = new UltrasoundScanTrajectoryPlanner(environment_string);
-        
-        // Setup ROS services
-        _scan_sequence_service = _nh.advertiseService("scan_pose_sequence_plan", 
-            &PlanningInterface::scanPoseSequenceCallback, this);
-        
-        _environment_update_service = _nh.advertiseService("update_environment", 
-            &PlanningInterface::updateEnvironmentCallback, this);
-        
-        _visualization_service = _nh.advertiseService("visualize_obstacles", 
-            &PlanningInterface::visualizeObstaclesCallback, this);
-        
-        // Setup obstacle visualization
-        setupObstacleVisualization();
-        
-        LOG_INFO << "PlanningInterface initialized successfully";
-        return true;
-        
-    } catch (const std::exception& e) {
-        LOG_ERROR << "Failed to initialize PlanningInterface: " << e.what();
-        return false;
+        else
+        {
+            ROS_WARN("No obstacle tree available from trajectory planner");
+        }
+    }
+    else
+    {
+        ROS_WARN("Cannot update obstacle visualization - components not properly initialized");
     }
 }
 
-bool PlanningInterface::scanPoseSequenceCallback(
-    custom_msgs::ScanPoseSequencePlan::Request &req,
-    custom_msgs::ScanPoseSequencePlan::Response &res)
+std::pair<std::vector<Eigen::Affine3d>, Eigen::VectorXd>
+PlanningInterface::processScanPoseSequenceRequest(const custom_msgs::ScanPoseSequencePlan::Request &req)
 {
-    LOG_INFO << "Received scan pose sequence planning request";
-    printScanPoseSequenceRequest(req);
-    
-    // Initialize response with neutral/safe defaults
-    res.success = false;
-    res.message = "Planning in progress";
-    res.trajectory_points.clear();
-    res.contact_force_flags.clear();
-    
-    try {
-        // Process the request to get poses and current joints
-        auto [poses, currentJoints] = processScanPoseSequenceRequest(req);
-        
-        if (poses.empty()) {
-            res.success = false;
-            res.message = "No valid poses provided in request";
-            LOG_WARNING << res.message;
-            return true; // Return true for service call success, but with failure result
-        }
-        
-        // Set poses and current joints in planner
-        _usPlanner->setPoses(poses);
-        _usPlanner->setCurrentJoints(currentJoints);
-        
-        // Robust planning with no duration filtering (0.0 = disabled)
-        bool planningSuccess = false;
-        std::string planningDetails;
-        
-        try {
-            // First try robust planning without duration filtering
-            planningSuccess = _usPlanner->planTrajectoriesRobust(
-                req.use_hauser_for_repositioning, 
-                req.enable_shortcutting, 
-                0.0  // No duration filtering - remove categorical 4-second discarding
-            );
-            planningDetails = "Robust planning with fallback handling";
-            
-        } catch (const std::exception& e) {
-            LOG_WARNING << "Robust planning failed: " << e.what() << " - trying regular planning";
-            
-            try {
-                // Fallback to regular planning
-                planningSuccess = _usPlanner->planTrajectories(
-                    req.use_hauser_for_repositioning, 
-                    req.enable_shortcutting
-                );
-                planningDetails = "Fallback to regular planning";
-                
-            } catch (const std::exception& e2) {
-                LOG_ERROR << "All planning methods failed: " << e2.what();
-                planningSuccess = false;
-                planningDetails = "All planning methods failed: " + std::string(e2.what());
-            }
-        }
-        
-        if (planningSuccess) {
-            // Get planned trajectories
-            auto trajectories = _usPlanner->getTrajectories();
-            
-            if (!trajectories.empty()) {
-                // Convert trajectories to ROS message format
-                std::vector<bool> contactFlags;
-                trajectory_msgs::JointTrajectory fullTrajectory;
-                fullTrajectory.joint_names = _joint_names;
-                
-                double currentTime = 0.0;
-                for (const auto& [trajectoryPoints, isContactForce] : trajectories) {
-                    for (const auto& point : trajectoryPoints) {
-                        trajectory_msgs::JointTrajectoryPoint rosPoint;
-                        rosPoint.positions = point.position;
-                        rosPoint.velocities = point.velocity;
-                        rosPoint.accelerations = point.acceleration;
-                        rosPoint.time_from_start = ros::Duration(currentTime + point.time);
-                        
-                        fullTrajectory.points.push_back(rosPoint);
-                        contactFlags.push_back(isContactForce);
-                    }
-                    
-                    // Update time for next segment
-                    if (!trajectoryPoints.empty()) {
-                        currentTime += trajectoryPoints.back().time;
-                    }
-                }
-                
-                res.trajectory_points = fullTrajectory;
-                res.contact_force_flags = boolsToBytes(contactFlags);
-                res.success = true;
-                
-                std::ostringstream msg;
-                msg << "Planning successful using " << planningDetails 
-                    << ". Generated " << trajectories.size() << " segments with " 
-                    << fullTrajectory.points.size() << " total points. "
-                    << std::count(contactFlags.begin(), contactFlags.end(), true) 
-                    << " contact force points.";
-                res.message = msg.str();
-                
-                LOG_INFO << res.message;
-                
-            } else {
-                res.success = false;
-                res.message = "Planning reported success but returned no trajectories";
-                LOG_WARNING << res.message;
-            }
-            
-        } else {
-            res.success = false;
-            std::ostringstream msg;
-            msg << "Planning failed after trying multiple approaches. " << planningDetails 
-                << ". This may indicate: (1) no valid solution exists, "
-                << "(2) poses are unreachable, or (3) environment constraints are too restrictive.";
-            res.message = msg.str();
-            LOG_WARNING << res.message;
-        }
-        
-    } catch (const std::exception& e) {
-        res.success = false;
-        std::ostringstream msg;
-        msg << "Exception during planning: " << e.what() 
-            << ". Planning system encountered an unexpected error.";
-        res.message = msg.str();
-        LOG_ERROR << res.message;
+    std::vector<Eigen::Affine3d> eigen_poses;
+    eigen_poses.reserve(req.scan_poses.size());
+    for (const auto &pose : req.scan_poses)
+    {
+        Eigen::Quaterniond q(
+            pose.orientation.w,
+            pose.orientation.x,
+            pose.orientation.y,
+            pose.orientation.z);
+        Eigen::Affine3d affine = Eigen::Affine3d::Identity();
+        affine.linear() = q.normalized().toRotationMatrix();
+
+        Eigen::Matrix3d rot180_x;
+        rot180_x = Eigen::AngleAxisd(M_PI, Eigen::Vector3d::UnitX()).toRotationMatrix();
+        // affine.linear() = rot180_x * affine.linear();
+
+        affine.translation() = Eigen::Vector3d(
+            pose.position.x,
+            pose.position.y,
+            pose.position.z);
+
+        eigen_poses.push_back(affine);
     }
-    
-    // Always return true for ROS service call success
-    // The actual planning result is indicated by res.success
-    return true;
+
+    Eigen::VectorXd joints;
+    if (!req.start_joints.position.empty())
+    {
+        joints = Eigen::Map<const Eigen::VectorXd>(
+            req.start_joints.position.data(),
+            req.start_joints.position.size());
+    }
+
+    return std::make_pair(eigen_poses, joints);
+}
+
+std::vector<unsigned char> PlanningInterface::boolsToBytes(const std::vector<bool> &bool_flags)
+{
+    std::vector<unsigned char> byte_flags;
+    byte_flags.reserve(bool_flags.size());
+    for (bool flag : bool_flags)
+    {
+        byte_flags.push_back(static_cast<unsigned char>(flag));
+    }
+    return byte_flags;
+}
+
+void PlanningInterface::printScanPoseSequenceRequest(const custom_msgs::ScanPoseSequencePlan::Request &req)
+{
+    ROS_INFO("Received scan_pose_sequence request with %lu poses", req.scan_poses.size());
+
+    for (size_t i = 0; i < req.scan_poses.size(); ++i)
+    {
+        const auto &pose = req.scan_poses[i];
+        ROS_INFO("Pose %lu:", i + 1);
+        ROS_INFO("  Position: x=%.3f, y=%.3f, z=%.3f",
+                 pose.position.x, pose.position.y, pose.position.z);
+        ROS_INFO("  Orientation: x=%.3f, y=%.3f, z=%.3f, w=%.3f",
+                 pose.orientation.x, pose.orientation.y,
+                 pose.orientation.z, pose.orientation.w);
+    }
+
+    ROS_INFO("Start joints:");
+    std::string joint_names_str;
+    for (size_t i = 0; i < req.start_joints.name.size(); ++i)
+    {
+        joint_names_str += req.start_joints.name[i];
+        if (i != req.start_joints.name.size() - 1)
+            joint_names_str += ", ";
+    }
+    ROS_INFO("  Joint names: %s", joint_names_str.c_str());
+
+    std::string joint_positions_str;
+    for (size_t i = 0; i < req.start_joints.position.size(); ++i)
+    {
+        joint_positions_str += std::to_string(req.start_joints.position[i]);
+        if (i != req.start_joints.position.size() - 1)
+            joint_positions_str += ", ";
+    }
+    ROS_INFO("  Positions: %s", joint_positions_str.c_str());
+}
+
+std::pair<std::vector<trajectory_msgs::JointTrajectory>, std::vector<unsigned char>>
+convertPlannerTrajectoriesToROS(
+    const std::vector<std::pair<std::vector<MotionGenerator::TrajectoryPoint>, bool>> &planner_traj,
+    const std::vector<std::string> &joint_names)
+{
+    std::vector<trajectory_msgs::JointTrajectory> ros_trajectories;
+    std::vector<unsigned char> trajectory_flags;
+
+    for (const auto &[segment, flag] : planner_traj)
+    {
+        trajectory_msgs::JointTrajectory ros_traj;
+        ros_traj.joint_names = joint_names;
+
+        for (const auto &point : segment)
+        {
+            trajectory_msgs::JointTrajectoryPoint ros_point;
+
+            // Convert positions
+            ros_point.positions = point.position;
+
+            // Convert velocities if available
+            if (!point.velocity.empty())
+            {
+                ros_point.velocities = point.velocity;
+            }
+
+            // Convert accelerations if available
+            if (!point.acceleration.empty())
+            {
+                ros_point.accelerations = point.acceleration;
+            }
+
+            ros_point.time_from_start = ros::Duration(point.time);
+
+            ros_traj.points.push_back(ros_point);
+        }
+
+        ros_trajectories.push_back(ros_traj);
+        trajectory_flags.push_back(flag ? 1 : 0); // Convert bool to unsigned char
+    }
+
+    return {ros_trajectories, trajectory_flags};
 }
 
 bool PlanningInterface::updateEnvironmentCallback(
     custom_msgs::String_StringBool::Request &req,
     custom_msgs::String_StringBool::Response &res)
 {
-    LOG_INFO << "Received environment update request";
-    
-    try {
-        if (_usPlanner) {
-            _usPlanner->setEnvironment(req.input_string);
-            updateObstacleVisualization();
-            
-            res.success = true;
-            res.message = "Environment updated successfully";
-            LOG_INFO << "Environment updated successfully";
-        } else {
-            res.success = false;
-            res.message = "USTrajectoryPlanner not initialized";
-            LOG_ERROR << "USTrajectoryPlanner not initialized for environment update";
-        }
-    } catch (const std::exception& e) {
-        res.success = false;
-        res.message = "Failed to update environment: " + std::string(e.what());
-        LOG_ERROR << "Failed to update environment: " << e.what();
-    }
-    
+    ROS_INFO("Received update_environment request with path.");
+
+    _usPlanner->setEnvironment(_env_description_path.c_str());
+
+    res.response_bool = true;
+    res.response_msg = "Environment updated";
+
+    updateObstacleVisualization();
+
     return true;
 }
 
@@ -372,130 +461,99 @@ bool PlanningInterface::visualizeObstaclesCallback(
     custom_msgs::String_StringBool::Request &req,
     custom_msgs::String_StringBool::Response &res)
 {
-    LOG_INFO << "Received obstacle visualization request";
-    
-    try {
-        if (_obstacle_visualizer) {
-            _obstacle_visualizer->publishObstacles();
-            res.success = true;
-            res.message = "Obstacle visualization published";
-            LOG_INFO << "Obstacle visualization published";
-        } else {
-            res.success = false;
-            res.message = "Obstacle visualizer not initialized";
-            LOG_WARNING << "Obstacle visualizer not initialized";
-        }
-    } catch (const std::exception& e) {
-        res.success = false;
-        res.message = "Failed to publish obstacle visualization: " + std::string(e.what());
-        LOG_ERROR << "Failed to publish obstacle visualization: " << e.what();
+    ROS_INFO("Manual obstacle visualization requested");
+
+    try
+    {
+        updateObstacleVisualization();
+        _obstacle_visualizer->publishObstacles();
+
+        res.response_bool = true;
+        res.response_msg = "Obstacle visualization published successfully";
     }
-    
+    catch (const std::exception &e)
+    {
+        ROS_ERROR("Failed to publish obstacle visualization: %s", e.what());
+        res.response_bool = false;
+        res.response_msg = "Failed to publish obstacle visualization: " + std::string(e.what());
+    }
+
     return true;
 }
 
-void PlanningInterface::setupObstacleVisualization()
+bool PlanningInterface::scanPoseSequenceCallback(
+    custom_msgs::ScanPoseSequencePlan::Request &req,
+    custom_msgs::ScanPoseSequencePlan::Response &res)
 {
-    try {
-        _obstacle_visualizer = std::make_unique<ObstacleVisualizer>(_nh, "obstacle_markers", "base_link");
-        _obstacle_visualizer->setPublishRate(1.0); // 1 Hz
-        
-        if (_usPlanner) {
-            auto obstacleTree = _usPlanner->getObstacleTree();
-            if (obstacleTree) {
-                _obstacle_visualizer->setObstacleTree(obstacleTree);
-            }
-        }
-        
-        LOG_INFO << "Obstacle visualization setup completed";
-    } catch (const std::exception& e) {
-        LOG_ERROR << "Failed to setup obstacle visualization: " << e.what();
+    printScanPoseSequenceRequest(req);
+    auto [poses, joints] = processScanPoseSequenceRequest(req);
+
+    _usPlanner->setCurrentJoints(joints);
+    _usPlanner->setPoses(poses);
+
+    // Publish obstacle visualization before planning
+    ROS_INFO("Publishing obstacle visualization before trajectory planning");
+    _obstacle_visualizer->publishObstacles();
+
+    bool hauser = false;
+    ros::param::get("hauser", hauser);
+
+    if (!_usPlanner->planTrajectories(hauser))
+    {
+        ROS_ERROR("Trajectory planning failed");
+        res.success = false;
+        res.message = "Planning failed - likely no valid configuration could be found for any of the poses provided - check environment constraints and obstacle visualization";
+        return true;
     }
+
+    const auto &planner_trajectories = _usPlanner->getTrajectories();
+    if (planner_trajectories.empty())
+    {
+        ROS_ERROR("Planner returned empty trajectories");
+        res.success = false;
+        res.message = "No valid trajectories generated";
+        return true;
+    }
+
+    for (auto trajectory : planner_trajectories)
+    {
+        auto [points, flag] = trajectory;
+        std::cout << "Trajectory with " << points.size() << " points and flag: " << (flag ? "true" : "false") << std::endl;
+    }
+
+    auto [ros_trajectories, trajectory_flags] = convertPlannerTrajectoriesToROS(
+        planner_trajectories,
+        req.start_joints.name);
+
+    res.joint_trajectories = ros_trajectories;
+    res.trajectory_flags = trajectory_flags;
+    res.success = true;
+    res.message = "Successfully generated " +
+                  std::to_string(ros_trajectories.size()) +
+                  " trajectory segments with obstacle visualization";
+
+    return true;
 }
 
-void PlanningInterface::updateObstacleVisualization()
+int main(int argc, char **argv)
 {
-    try {
-        if (_obstacle_visualizer && _usPlanner) {
-            auto obstacleTree = _usPlanner->getObstacleTree();
-            if (obstacleTree) {
-                _obstacle_visualizer->setObstacleTree(obstacleTree);
-                _obstacle_visualizer->publishObstacles();
-                LOG_DEBUG << "Obstacle visualization updated";
-            }
-        }
-    } catch (const std::exception& e) {
-        LOG_ERROR << "Failed to update obstacle visualization: " << e.what();
-    }
-}
+    ros::init(argc, argv, "planning_node_with_visualization");
+    ros::NodeHandle nh;
+    ros::AsyncSpinner spinner(0);
+    spinner.start();
 
-void PlanningInterface::printScanPoseSequenceRequest(const custom_msgs::ScanPoseSequencePlan::Request &req)
-{
-    LOG_INFO << "Scan Pose Sequence Request:";
-    LOG_INFO << "  - Poses count: " << req.scan_poses.poses.size();
-    LOG_INFO << "  - Current joints: [" << req.current_joints.position.size() << " joints]";
-    LOG_INFO << "  - Use Hauser for repositioning: " << (req.use_hauser_for_repositioning ? "yes" : "no");
-    LOG_INFO << "  - Enable shortcutting: " << (req.enable_shortcutting ? "yes" : "no");
-    
-    // Log joint values with reasonable precision
-    if (!req.current_joints.position.empty()) {
-        std::ostringstream joints_str;
-        joints_str << std::fixed << std::setprecision(3);
-        for (size_t i = 0; i < req.current_joints.position.size(); ++i) {
-            if (i > 0) joints_str << ", ";
-            joints_str << req.current_joints.position[i];
-        }
-        LOG_DEBUG << "  - Joint values: [" << joints_str.str() << "]";
-    }
-}
+    ROS_INFO("Starting Planning Node with Obstacle Visualization");
 
-std::pair<std::vector<Eigen::Affine3d>, Eigen::VectorXd> 
-PlanningInterface::processScanPoseSequenceRequest(const custom_msgs::ScanPoseSequencePlan::Request &req)
-{
-    std::vector<Eigen::Affine3d> poses;
-    Eigen::VectorXd currentJoints;
-    
-    // Convert ROS poses to Eigen format
-    poses.reserve(req.scan_poses.poses.size());
-    for (const auto& pose : req.scan_poses.poses) {
-        Eigen::Affine3d eigenPose = Eigen::Affine3d::Identity();
-        
-        // Set translation
-        eigenPose.translation() << pose.position.x, pose.position.y, pose.position.z;
-        
-        // Set rotation from quaternion
-        Eigen::Quaterniond quat(pose.orientation.w, pose.orientation.x, 
-                               pose.orientation.y, pose.orientation.z);
-        eigenPose.linear() = quat.toRotationMatrix();
-        
-        poses.push_back(eigenPose);
+    PlanningInterface server(nh);
+    if (!server.initialize())
+    {
+        ROS_FATAL("Failed to initialize planning interface");
+        return -1;
     }
-    
-    // Convert current joints
-    if (!req.current_joints.position.empty()) {
-        currentJoints.resize(req.current_joints.position.size());
-        for (size_t i = 0; i < req.current_joints.position.size(); ++i) {
-            currentJoints[i] = req.current_joints.position[i];
-        }
-    }
-    
-    return std::make_pair(poses, currentJoints);
-}
 
-std::vector<unsigned char> PlanningInterface::boolsToBytes(const std::vector<bool> &bool_flags)
-{
-    std::vector<unsigned char> bytes;
-    bytes.reserve((bool_flags.size() + 7) / 8); // Ceiling division
-    
-    for (size_t i = 0; i < bool_flags.size(); i += 8) {
-        unsigned char byte = 0;
-        for (int j = 0; j < 8 && (i + j) < bool_flags.size(); ++j) {
-            if (bool_flags[i + j]) {
-                byte |= (1 << j);
-            }
-        }
-        bytes.push_back(byte);
-    }
-    
-    return bytes;
+    ROS_INFO("Planning node with obstacle visualization ready!");
+    ROS_INFO("Use 'rosservice call /visualize_obstacles' to manually trigger obstacle visualization");
+
+    ros::waitForShutdown();
+    return 0;
 }
