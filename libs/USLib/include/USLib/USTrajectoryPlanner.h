@@ -89,10 +89,10 @@ public:
      * @brief Plan complete scan trajectory sequence with robust fallback handling
      * @param useHauserForRepositioning Use RRT+Hauser instead of STOMP for repositioning
      * @param enableShortcutting Apply path shortcutting optimization
-     * @param minSegmentDuration Minimum segment duration in seconds (segments shorter than this are discarded)
+     * @param minSegmentDuration Minimum segment duration in seconds (0.0 = no duration filtering)
      * @return True if planning succeeded
      */
-    bool planTrajectoriesRobust(bool useHauserForRepositioning = false, bool enableShortcutting = true, double minSegmentDuration = 4.0);
+    bool planTrajectoriesRobust(bool useHauserForRepositioning = false, bool enableShortcutting = true, double minSegmentDuration = 0.0);
     
     /**
      * @brief Get planned trajectories with contact force flags

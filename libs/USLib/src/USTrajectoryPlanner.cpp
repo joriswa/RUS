@@ -394,7 +394,11 @@ bool UltrasoundScanTrajectoryPlanner::planTrajectoriesRobust(bool useHauserForRe
     _trajectories.clear();
 
     LOG_INFO << "Starting robust trajectory planning with " << _poses.size() << " poses";
-    LOG_INFO << "Minimum segment duration: " << minSegmentDuration << "s";
+    if (minSegmentDuration > 0.0) {
+        LOG_INFO << "Minimum segment duration: " << minSegmentDuration << "s";
+    } else {
+        LOG_INFO << "Duration filtering disabled - will try all valid segments";
+    }
 
     // Special case: single pose request
     if (_poses.size() == 1) {
@@ -413,15 +417,22 @@ bool UltrasoundScanTrajectoryPlanner::planTrajectoriesRobust(bool useHauserForRe
     
     LOG_INFO << "Found " << validArms.size() << " valid poses out of " << checkpointResult.totalOriginalPoses << " total poses";
 
-    // Step 1: Analyze and filter segments by duration
-    auto filteredSegments = analyzeAndFilterSegments(validArms, validSegments, minSegmentDuration);
-    
-    if (filteredSegments.empty()) {
-        LOG_WARNING << "No segments meet minimum duration criteria (" << minSegmentDuration << "s) - falling back to regular planning";
-        return planTrajectories(useHauserForRepositioning, enableShortcutting);
+    // Step 1: Analyze and filter segments by duration (skip filtering if minSegmentDuration is 0.0)
+    std::vector<std::pair<size_t, size_t>> filteredSegments;
+    if (minSegmentDuration > 0.0) {
+        filteredSegments = analyzeAndFilterSegments(validArms, validSegments, minSegmentDuration);
+        
+        if (filteredSegments.empty()) {
+            LOG_WARNING << "No segments meet minimum duration criteria (" << minSegmentDuration << "s) - trying all segments";
+            filteredSegments = validSegments;  // Use all segments as fallback
+        } else {
+            LOG_INFO << "Filtered to " << filteredSegments.size() << " segments (from " << validSegments.size() << ") that meet duration criteria";
+        }
+    } else {
+        // No duration filtering - use all valid segments
+        filteredSegments = validSegments;
+        LOG_INFO << "Using all " << filteredSegments.size() << " valid segments (duration filtering disabled)";
     }
-    
-    LOG_INFO << "Filtered to " << filteredSegments.size() << " segments (from " << validSegments.size() << ") that meet duration criteria";
 
     // Step 2: Try planning starting from each viable segment until one succeeds
     for (size_t startIdx = 0; startIdx < filteredSegments.size(); ++startIdx) {
@@ -447,8 +458,37 @@ bool UltrasoundScanTrajectoryPlanner::planTrajectoriesRobust(bool useHauserForRe
         }
     }
 
-    LOG_ERROR << "Robust planning failed - could not find viable starting segment";
-    LOG_INFO << "Falling back to regular planning as last resort";
+    LOG_ERROR << "Robust planning failed - could not find viable starting segment from filtered segments";
+    
+    // If we used duration filtering and failed, try again with all segments
+    if (minSegmentDuration > 0.0 && filteredSegments.size() < validSegments.size()) {
+        LOG_INFO << "Retrying with all valid segments (ignoring duration filter)";
+        
+        for (size_t startIdx = 0; startIdx < validSegments.size(); ++startIdx) {
+            LOG_INFO << "Attempting planning starting from unfiltered segment " << startIdx << " (poses " 
+                     << validSegments[startIdx].first << "-" << validSegments[startIdx].second << ")";
+            
+            bool success = tryPlanningFromSegment(validArms, validSegments, validPoseIndices, 
+                                                startIdx, useHauserForRepositioning, enableShortcutting);
+            
+            if (success) {
+                LOG_INFO << "Robust planning succeeded starting from unfiltered segment " << startIdx;
+                
+                // Check and fix discontinuities between trajectory segments
+                bool discontinuitiesFixed = fixTrajectoryDiscontinuities();
+                if (discontinuitiesFixed) {
+                    LOG_INFO << "Trajectory discontinuities corrected";
+                }
+                
+                printSegmentTimes();
+                return true;
+            } else {
+                LOG_WARNING << "Planning failed starting from unfiltered segment " << startIdx << " - trying next segment";
+            }
+        }
+    }
+    
+    LOG_WARNING << "All robust planning attempts failed - falling back to regular planning as last resort";
     
     // Last resort: try regular planning
     return planTrajectories(useHauserForRepositioning, enableShortcutting);
