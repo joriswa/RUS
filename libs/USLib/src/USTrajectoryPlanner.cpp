@@ -376,8 +376,7 @@ bool UltrasoundScanTrajectoryPlanner::planTrajectories(bool useHauserForRepositi
 }
 
 bool UltrasoundScanTrajectoryPlanner::planTrajectoriesRobust(bool useHauserForRepositioning,
-                                                            bool enableShortcutting,
-                                                            double minSegmentDuration)
+                                                            bool enableShortcutting)
 {
     if (_environment.empty()) {
         throw std::runtime_error("Environment string is not populated.");
@@ -394,7 +393,6 @@ bool UltrasoundScanTrajectoryPlanner::planTrajectoriesRobust(bool useHauserForRe
     _trajectories.clear();
 
     LOG_INFO << "Starting robust trajectory planning with " << _poses.size() << " poses";
-    LOG_INFO << "Minimum segment duration: " << minSegmentDuration << "s";
 
     // Special case: single pose request
     if (_poses.size() == 1) {
@@ -413,22 +411,12 @@ bool UltrasoundScanTrajectoryPlanner::planTrajectoriesRobust(bool useHauserForRe
     
     LOG_INFO << "Found " << validArms.size() << " valid poses out of " << checkpointResult.totalOriginalPoses << " total poses";
 
-    // Step 1: Analyze and filter segments by duration
-    auto filteredSegments = analyzeAndFilterSegments(validArms, validSegments, minSegmentDuration);
-    
-    if (filteredSegments.empty()) {
-        LOG_WARNING << "No segments meet minimum duration criteria (" << minSegmentDuration << "s) - falling back to regular planning";
-        return planTrajectories(useHauserForRepositioning, enableShortcutting);
-    }
-    
-    LOG_INFO << "Filtered to " << filteredSegments.size() << " segments (from " << validSegments.size() << ") that meet duration criteria";
-
-    // Step 2: Try planning starting from each viable segment until one succeeds
-    for (size_t startIdx = 0; startIdx < filteredSegments.size(); ++startIdx) {
+    // Try planning starting from each viable segment until one succeeds
+    for (size_t startIdx = 0; startIdx < validSegments.size(); ++startIdx) {
         LOG_INFO << "Attempting planning starting from segment " << startIdx << " (poses " 
-                 << filteredSegments[startIdx].first << "-" << filteredSegments[startIdx].second << ")";
+                 << validSegments[startIdx].first << "-" << validSegments[startIdx].second << ")";
         
-        bool success = tryPlanningFromSegment(validArms, filteredSegments, validPoseIndices, 
+        bool success = tryPlanningFromSegment(validArms, validSegments, validPoseIndices, 
                                             startIdx, useHauserForRepositioning, enableShortcutting);
         
         if (success) {
@@ -447,8 +435,7 @@ bool UltrasoundScanTrajectoryPlanner::planTrajectoriesRobust(bool useHauserForRe
         }
     }
 
-    LOG_ERROR << "Robust planning failed - could not find viable starting segment";
-    LOG_INFO << "Falling back to regular planning as last resort";
+    LOG_WARNING << "All robust planning attempts failed - falling back to regular planning as last resort";
     
     // Last resort: try regular planning
     return planTrajectories(useHauserForRepositioning, enableShortcutting);
@@ -1239,84 +1226,10 @@ void UltrasoundScanTrajectoryPlanner::printSegmentTimes() const
              << "s across " << _trajectories.size() << " segments";
 }
 
-std::vector<std::pair<size_t, size_t>> UltrasoundScanTrajectoryPlanner::analyzeAndFilterSegments(
-    const std::vector<RobotArm>& validArms,
-    const std::vector<std::pair<size_t, size_t>>& validSegments,
-    double minDuration) const
-{
-    std::vector<std::pair<size_t, size_t>> filteredSegments;
-    
-    LOG_DEBUG << "Analyzing " << validSegments.size() << " segments for duration filtering";
-    
-    for (const auto& segment : validSegments) {
-        size_t startIdx = segment.first;
-        size_t endIdx = segment.second;
-        
-        double segmentDuration = 0.0;
-        
-        if (startIdx == endIdx) {
-            // Single point segment - assign minimal duration
-            segmentDuration = 0.1; // 100ms for single point contact
-            LOG_DEBUG << "Segment " << startIdx << "-" << endIdx << ": single point, duration = " 
-                      << segmentDuration << "s";
-        } else {
-            // Multi-point segment - estimate duration based on joint movements
-            double totalDuration = 0.0;
-            
-            for (size_t i = startIdx; i < endIdx; ++i) {
-                double stepDuration = estimateSegmentDuration(validArms[i], validArms[i + 1]);
-                totalDuration += stepDuration;
-            }
-            
-            segmentDuration = totalDuration;
-            LOG_DEBUG << "Segment " << startIdx << "-" << endIdx << ": " << (endIdx - startIdx + 1) 
-                      << " poses, estimated duration = " << segmentDuration << "s";
-        }
-        
-        if (segmentDuration >= minDuration) {
-            filteredSegments.push_back(segment);
-            LOG_DEBUG << "Segment " << startIdx << "-" << endIdx << " ACCEPTED (duration: " 
-                      << segmentDuration << "s >= " << minDuration << "s)";
-        } else {
-            LOG_DEBUG << "Segment " << startIdx << "-" << endIdx << " REJECTED (duration: " 
-                      << segmentDuration << "s < " << minDuration << "s)";
-        }
-    }
-    
-    return filteredSegments;
-}
-
-double UltrasoundScanTrajectoryPlanner::estimateSegmentDuration(const RobotArm& startArm, const RobotArm& endArm) const
-{
-    // Estimate trajectory duration based on joint angle differences and velocity limits
-    auto startJoints = startArm.getJointAngles();
-    auto endJoints = endArm.getJointAngles();
-    
-    if (startJoints.size() != endJoints.size()) {
-        LOG_WARNING << "Joint size mismatch in duration estimation";
-        return 1.0; // Default 1 second
-    }
-    
-    // Conservative velocity limits for duration estimation (rad/s)
-    std::vector<double> maxVelocities = {1.5, 1.5, 1.5, 1.5, 2.0, 2.0, 2.0}; // Conservative joint limits
-    
-    double maxDuration = 0.0;
-    
-    for (size_t i = 0; i < startJoints.size(); ++i) {
-        double jointDiff = std::abs(endJoints[i] - startJoints[i]);
-        double jointDuration = jointDiff / maxVelocities[i];
-        maxDuration = std::max(maxDuration, jointDuration);
-    }
-    
-    // Add safety margin and minimum contact time
-    double estimatedDuration = std::max(0.5, maxDuration * 1.5); // 1.5x safety factor, minimum 0.5s
-    
-    return estimatedDuration;
-}
 
 bool UltrasoundScanTrajectoryPlanner::tryPlanningFromSegment(
     const std::vector<RobotArm>& validArms,
-    const std::vector<std::pair<size_t, size_t>>& filteredSegments,
+    const std::vector<std::pair<size_t, size_t>>& validSegments,
     const std::vector<size_t>& validPoseIndices,
     size_t startSegmentIdx,
     bool useHauserForRepositioning,
@@ -1340,16 +1253,16 @@ bool UltrasoundScanTrajectoryPlanner::tryPlanningFromSegment(
         std::vector<std::string> repositioningDescriptions;
 
         // Add initial repositioning trajectory (current joints -> first segment start)
-        size_t firstSegmentStart = filteredSegments[startSegmentIdx].first;
+        size_t firstSegmentStart = validSegments[startSegmentIdx].first;
         repositioningRequests.emplace_back(_currentJoints, validArms[firstSegmentStart].getJointAngles());
         repositioningDescriptions.emplace_back("Robust initial repositioning: current -> segment " 
                                                + std::to_string(startSegmentIdx) + " start (pose " 
                                                + std::to_string(validPoseIndices[firstSegmentStart]) + ")");
 
         // Add inter-segment repositioning trajectories for remaining segments
-        for (size_t segIdx = startSegmentIdx; segIdx + 1 < filteredSegments.size(); segIdx++) {
-            size_t currentEnd = filteredSegments[segIdx].second;
-            size_t nextStart = filteredSegments[segIdx + 1].first;
+        for (size_t segIdx = startSegmentIdx; segIdx + 1 < validSegments.size(); segIdx++) {
+            size_t currentEnd = validSegments[segIdx].second;
+            size_t nextStart = validSegments[segIdx + 1].first;
 
             repositioningRequests.emplace_back(validArms[currentEnd].getJointAngles(),
                                                validArms[nextStart].getJointAngles());
@@ -1403,10 +1316,10 @@ bool UltrasoundScanTrajectoryPlanner::tryPlanningFromSegment(
         }
         repositioningIndex++;
 
-        // 2. Add contact force trajectories for filtered segments starting from startSegmentIdx
-        for (size_t segIdx = startSegmentIdx; segIdx < filteredSegments.size(); segIdx++) {
-            size_t start = filteredSegments[segIdx].first;
-            size_t end = filteredSegments[segIdx].second;
+        // 2. Add contact force trajectories for valid segments starting from startSegmentIdx
+        for (size_t segIdx = startSegmentIdx; segIdx < validSegments.size(); segIdx++) {
+            size_t start = validSegments[segIdx].first;
+            size_t end = validSegments[segIdx].second;
             status.totalSegments++;
 
             try {
@@ -1465,7 +1378,7 @@ bool UltrasoundScanTrajectoryPlanner::tryPlanningFromSegment(
             }
 
             // Add inter-segment repositioning if not the last segment
-            if (segIdx + 1 < filteredSegments.size()) {
+            if (segIdx + 1 < validSegments.size()) {
                 status.totalRepositioning++;
                 if (repositioningIndex < repositioningResults.size() && !repositioningResults[repositioningIndex].empty()) {
                     std::vector<MotionGenerator::TrajectoryPoint> trajectoryPoints;
@@ -1476,8 +1389,8 @@ bool UltrasoundScanTrajectoryPlanner::tryPlanningFromSegment(
                     }
 
                     _trajectories.emplace_back(trajectoryPoints, false); // repositioning = NOT contact force
-                    size_t currentEnd = filteredSegments[segIdx].second;
-                    size_t nextStart = filteredSegments[segIdx + 1].first;
+                    size_t currentEnd = validSegments[segIdx].second;
+                    size_t nextStart = validSegments[segIdx + 1].first;
                     LOG_DEBUG << "Robust inter-segment repositioning " << currentEnd << "-" << nextStart
                               << " (original poses " << validPoseIndices[currentEnd] << "-" << validPoseIndices[nextStart] << ")"
                               << ": " << trajectoryPoints.size() << " points";
