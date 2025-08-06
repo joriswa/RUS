@@ -991,6 +991,15 @@ void MotionGenerator::initializeMatrices(const int &N, const double &dt)
         A(i + 1, i) = -2. / (dt * dt);
         A(i + 2, i) = 1. / (dt * dt);
     }
+
+    // set the start and end to super hi values
+    A(0, 0) = 1e6;         // Start position constraint
+    A(1, 0) = 0.0;         // Start velocity constraint
+    A(2, 0) = 0.0;         // Start acceleration constraint
+    A(N, N - 1) = 1e6;     // End position constraint
+    A(N + 1, N - 1) = 0.0; // End velocity constraint
+    A(N + 2, N - 1) = 0.0; // End acceleration constraint
+
     // FIXED: Break down complex expression to avoid large temporary allocations on RT kernels
     // Pre-allocate _R to correct size to avoid reallocation during computation
     _R.resize(N, N);
@@ -998,10 +1007,10 @@ void MotionGenerator::initializeMatrices(const int &N, const double &dt)
     // Step 1: Compute A.transpose() * A directly into _R (avoid temporary for A^T * A)
     _R.noalias() = A.transpose() * A;
     
-    // // Step 2: Add identity matrix to diagonal (avoid temporary for identity matrix)
-    // for (int i = 0; i < N; ++i) {
-    //     _R(i, i) += 1e-6;
-    // }
+    // Step 2: Add identity matrix to diagonal (avoid temporary for identity matrix)
+    for (int i = 0; i < N; ++i) {
+        _R(i, i) += 1e-6;
+    }
     
     // FIXED: Pre-allocate matrices and use explicit steps to avoid RT kernel malloc issues
     Eigen::MatrixXd Rinv(N, N);

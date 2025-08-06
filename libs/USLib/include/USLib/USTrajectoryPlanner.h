@@ -159,6 +159,16 @@ public:
     std::vector<Eigen::VectorXd> optimizeSmallMovements(const std::vector<Eigen::VectorXd> &waypoints, double movementThreshold = 0.05);
 
 private:
+    // Planning status tracking for robust partial planning
+    struct PlanningStatus {
+        int totalSegments = 0;
+        int successfulSegments = 0;
+        int totalRepositioning = 0;
+        int successfulRepositioning = 0;
+        std::vector<std::string> failures;
+        std::vector<std::string> successes;
+    };
+
     Eigen::VectorXd _currentJoints;
     std::string _environment;
     std::vector<Eigen::Affine3d> _poses;
@@ -268,4 +278,32 @@ private:
         size_t startSegmentIdx,
         bool useHauserForRepositioning,
         bool enableShortcutting);
+        
+    /**
+     * @brief Try initial repositioning to find the first reachable segment
+     * @param validSegments Valid trajectory segments
+     * @param arms Valid robot arm configurations
+     * @param validPoseIndices Mapping to original pose indices
+     * @param useHauserForRepositioning Use RRT+Hauser instead of STOMP
+     * @param enableShortcutting Apply path shortcutting
+     * @param status Planning status to update
+     * @return Pair of (starting segment index, success flag)
+     */
+    std::pair<size_t, bool> tryInitialRepositioning(
+        const std::vector<std::pair<size_t, size_t>>& validSegments,
+        const std::vector<RobotArm>& arms,
+        const std::vector<size_t>& validPoseIndices,
+        bool useHauserForRepositioning,
+        bool enableShortcutting,
+        PlanningStatus& status);
+        
+    /**
+     * @brief Find the longest connected chain of segments with successful repositioning
+     * @param validSegments Valid trajectory segments
+     * @param repositioningResults Results from inter-segment repositioning planning
+     * @return Pair of (start segment index, end segment index) for the longest chain
+     */
+    std::pair<size_t, size_t> findLongestConnectedChain(
+        const std::vector<std::pair<size_t, size_t>>& validSegments,
+        const std::vector<Trajectory>& repositioningResults);
 };
